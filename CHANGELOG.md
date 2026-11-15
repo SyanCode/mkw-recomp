@@ -82,6 +82,10 @@ its issue, #N), `### Tested` (what was run from the packages before publishing) 
   (169.254.x.x), and two PCs on the same network never saw each other. The address on the network with the default
   route now comes first, then other local networks, then 169.254.x.x, and VPN /32 addresses last. The log lists the
   candidates (`nifm: LAN candidate`); `lan_ip` in `mkw.ini` still picks one by hand.
+- **LAN play on game version 1.8.0** (#309 by @Elenedeath): 1.8.0's patch table had no `lan` set, so its title menu
+  kept Wireless Play (the console's radio, which a PC does not have) and picking it ended in 2203-0022, the game
+  never asking for a local network. The set is ported, and with LAN play on the menu opens with LAN Play chosen, as on
+  1.0.0.
 - **"Choose game folder" in every menu language**: its four texts came in English only in 0.1.11.
 - **Photo mode no longer crashes on game version 1.8.0** (#305): pressing Minus in free roam at 1440 lines closed the
   game (`main+0xa66e0`): 1.8.0's photo mode, with its stickers, needs render targets the game's buffer pool has no room

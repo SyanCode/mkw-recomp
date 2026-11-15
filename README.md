@@ -200,6 +200,8 @@ uv run tools/build/build.py              # build/mkw; --target windows builds mk
 build/mkw
 ```
 
+Shortcuts for these flows and the release ones: `make build`, `make appimage` (`make help` lists them all).
+
 From a packed dump (`.nup`, `.nx`) and for Linux on AArch64: [tools/build/README.md](tools/build/README.md#a-packed-dump)
 and [its AArch64 section](tools/build/README.md#linux-aarch64).
 
@@ -218,7 +220,8 @@ see [tools/shaders/README.md](tools/shaders/README.md). Everything generated goe
 | `.github/` | CI, issue and pull request templates |
 
 At the root: `pyproject.toml` and `uv.lock` (the Python environment of the tools), `.gitignore`, `LICENSE`,
-`CONTRIBUTING.md`, `CHANGELOG.md` (each release's changes, its notes) and `AGENTS.md` (a guide for coding agents).
+`CONTRIBUTING.md`, `CHANGELOG.md` (each release's changes, its notes), `AGENTS.md` (a guide for coding agents) and
+`Makefile` (shortcuts for the build flows: `make help`).
 
 ## Design decisions (30/10/2026)
 
