@@ -37,6 +37,13 @@ Settings > General > Online play > Server address.
 - A **public** room is listed and joined with its code. A **private** one is joined with the code *and* an invitation
   (`INVITE @name` by a member); the admin enters any room.
 
+## A room's required mods
+
+The room's creator (or the admin) names the mods every player must run, up to 8: `MODS <entry> ...` from inside the room, one
+entry per mod as `tools/mod/room_sync.py` writes it (`<GameBanana mod id>:<file id>:<12 hex fingerprint>:<title>`). The server
+only stores and forwards them (to everyone joining, and again every few seconds), never reads one, and `LIST` shows how many a
+room has. The players compare them with what they have installed; the start screen's Online tab does the rest (see the README).
+
 ## What the server sees and can do
 
 It sees every player's public address and the room's secret (it makes it and hands it to the members), so it can read and

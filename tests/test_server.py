@@ -91,12 +91,12 @@ def test_server(server) -> None:
     assert a.cmd("CREATE fun public 8").startswith("ERR you may not host")
     assert a.cmd("ADMIN nope").startswith("ERR")
     assert a.cmd(f"ADMIN {server['admin']}").endswith("admin")
-    code = a.cmd("CREATE fun public 8", "ROOM").split()[1]
+    code = a.cmd("CREATE fun public 8", "ROOM ").split()[1]
     assert re.fullmatch(r"[A-Z2-9]{6}", code)
     assert b.cmd("CREATE mine public 4").startswith("ERR you may not host")
     assert a.cmd("GRANT @bob", "OK") == "OK"
     assert b.recv("YOU").endswith("host")
-    assert a.cmd("CREATE perm public 4 persist", "ROOM")
+    assert a.cmd("CREATE perm public 4 persist", "ROOM ")
 
     # join, peers, the room's secret
     ja = a.cmd(f"JOIN {code} 192.168.1.5:4000", "JOINED").split()
@@ -108,12 +108,12 @@ def test_server(server) -> None:
             break
         peers = a.recv("PEERS").split()
     assert peers[2] == "2" and ":@bob:127.0.0.1:" in peers[4] and peers[4].endswith(":10.0.0.9:5000")
-    assert a.cmd("JOIN ZZZZZZ").startswith("ERR no such room")
+    assert a.cmd("JOIN ZZZZZZ", "ERR").startswith("ERR no such room")
 
     # a private room: the code is not enough
-    priv = a.cmd("CREATE secret private 4", "ROOM").split()[1]
+    priv = a.cmd("CREATE secret private 4", "ROOM ").split()[1]
     assert c.hello("@carol", pw).startswith("OK")
-    assert c.cmd(f"JOIN {priv}").startswith("ERR private room")
+    assert c.cmd(f"JOIN {priv}", "ERR").startswith("ERR private room")
     assert a.cmd(f"JOIN {priv} 1.1.1.1:1", "JOINED")
     assert a.cmd("INVITE @carol", "OK") == "OK"
     assert c.recv("INVITED").split()[1:3] == ["@alice", priv]
@@ -128,6 +128,19 @@ def test_server(server) -> None:
         if d.startswith(b"MKRL"):
             break
     assert d == b"MKRL" + bytes([1]) + b"packet-a-to-c"
+
+    # the room's required mods: only its creator names them, joiners get them on joining
+    fp = "0123456789ab"
+    entry = f"11:22:{fp}:Race%20Timer"
+    assert b.cmd(f"MODS {entry}", "ERR").startswith("ERR only the room's creator")
+    assert a.cmd("MODS bad", "ERR").startswith("ERR at most")
+    assert a.cmd(f"MODS {entry} 0:0:{fp}:Local", "OK") == "OK"
+    d = Client(port)
+    assert d.hello("@dave", pw).startswith("OK")
+    assert a.cmd("INVITE @dave", "OK") == "OK"
+    d.cmd(f"JOIN {priv} 3.3.3.3:3", "JOINED")
+    assert d.recv("ROOMMODS").split()[2:] == ["2", entry, f"0:0:{fp}:Local"]
+    assert any(row.startswith(priv) and row.endswith(":2") for row in d.cmd("LIST", "ROOMS").split())
 
     # kicking and closing
     assert b.cmd("KICK @carol", "ERR").startswith("ERR not allowed")

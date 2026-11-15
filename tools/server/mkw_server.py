@@ -18,9 +18,11 @@ Usage: uv run tools/server/mkw_server.py [--port 27500] [--mode friends|public] 
 The admin key (printed at start, kept in the state file) makes a session admin: `ADMIN <key>` from the game's menu.
 Wire format (UDP, one socket): "MKSV " + a text line, "MKRL" + a slot + a room packet. Lines, client to server:
   HELLO @h secret [password] | <token> CREATE name public|private max [persist] | JOIN code lip:lport | LEAVE | LIST |
-  INVITE @h | GRANT @h | REVOKE @h | KICK @h | CLOSE code | ADMIN key | PING | WHOAMI
+  INVITE @h | GRANT @h | REVOKE @h | KICK @h | CLOSE code | ADMIN key | PING | WHOAMI | MODS [entry ...]
+MODS (the room's creator, or the admin) names the mods everybody in the room must run, up to 8 entries as tools/mod/room_sync.py
+  writes them (`<GameBanana mod>:<file>:<fingerprint>:<title>`); the server only stores and forwards them, never reads one.
 Replies and events: OK token ip:port role | ROOM code | JOINED code slot keyhex name max | PEERS code n slot:@h:ip:port:lip:lport...
-  | ROOMS n code:name:players:max:@host... | INVITED @from code name | KICKED code | ERR text | PONG | YOU @h role.
+  | ROOMS n code:name:players:max:@host:mods... | ROOMMODS code n entry... | INVITED @from code name | KICKED code | ERR text | PONG | YOU @h role.
 """
 
 import argparse
@@ -40,6 +42,8 @@ RELAY = b"MKRL"
 ALPHA = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 HANDLE = re.compile(r"^@[a-z0-9_]{2,20}$")
 MAX_PLAYERS = 24
+MAX_MODS = 8
+MOD_ENTRY = re.compile(r"^\d{1,9}:\d{1,9}:[0-9a-f]{12}:[A-Za-z0-9%._~-]{0,80}$")
 SESSION_TTL = 30.0
 
 
@@ -88,6 +92,7 @@ class Room:
         )
         self.members: dict[int, Session] = {}
         self.invited: set[str] = {creator}
+        self.mods: list[str] = []
 
 
 class State:
@@ -117,7 +122,9 @@ class Server(asyncio.DatagramProtocol):
         self.hello_buckets: dict[str, Bucket] = {}
         self.tp = None
         for code, r in state.data["rooms"].items():
-            self.rooms[code] = Room(code, r["name"], r["public"], r["max"], r["creator"], True, bytes.fromhex(r["key"]))
+            room = Room(code, r["name"], r["public"], r["max"], r["creator"], True, bytes.fromhex(r["key"]))
+            room.mods = r.get("mods", [])
+            self.rooms[code] = room
 
     # ---- plumbing
     def connection_made(self, transport) -> None:
@@ -280,7 +287,22 @@ class Server(asyncio.DatagramProtocol):
         s.room, s.slot = r, slot
         r.members[slot] = s
         self.say(s.addr, f"JOINED {r.code} {slot} {r.key.hex()} {r.name} {r.max}")
+        self.say(s.addr, f"ROOMMODS {r.code} {len(r.mods)} " + " ".join(r.mods))
         self.announce(r)
+
+    def cmd_mods(self, s, a) -> None:
+        r = s.room
+        if not r or not (s.role == "admin" or r.creator == s.handle):
+            return self.say(s.addr, "ERR only the room's creator names its mods, from inside the room")
+        if len(a) > MAX_MODS or not all(MOD_ENTRY.match(e) for e in a):
+            return self.say(s.addr, f"ERR at most {MAX_MODS} mods, each as <mod>:<file>:<fingerprint>:<title>")
+        r.mods = list(a)
+        if r.code in self.st.data["rooms"]:
+            self.st.data["rooms"][r.code]["mods"] = r.mods
+            self.st.save()
+        for m in r.members.values():
+            self.say(m.addr, f"ROOMMODS {r.code} {len(r.mods)} " + " ".join(r.mods))
+        self.say(s.addr, "OK")
 
     def cmd_leave(self, s, a) -> None:
         self.leave(s)
@@ -296,7 +318,7 @@ class Server(asyncio.DatagramProtocol):
 
     def cmd_list(self, s, a) -> None:
         rows = [
-            f"{r.code}:{r.name}:{len(r.members)}:{r.max}:{r.creator}"
+            f"{r.code}:{r.name}:{len(r.members)}:{r.max}:{r.creator}:{len(r.mods)}"
             for r in self.rooms.values()
             if r.public or s.role == "admin" or s.handle in r.invited
         ]
@@ -370,6 +392,8 @@ class Server(asyncio.DatagramProtocol):
                 for r in self.rooms.values():
                     if r.members:
                         self.announce(r)
+                        for m in r.members.values():  # a lost ROOMMODS comes again
+                            self.say(m.addr, f"ROOMMODS {r.code} {len(r.mods)} " + " ".join(r.mods))
 
 
 async def main() -> None:

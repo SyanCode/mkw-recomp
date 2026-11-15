@@ -75,6 +75,15 @@ static void room_test(int port, const char *pw, const char *admin, int blocked, 
     for (int i = 0; i < n; i++) named += pl[i].handle && !strcmp(pl[i].handle, h[(pl[i].vip & 0xff) - 1]);
     CHECK(named == 3);
 
+    // the room's required mods: named by its creator, seen by the joiners
+    char mods[704];
+    CHECK(p2p_server_command(a, "MODS 11:22:0123456789ab:Timer 0:0:ba9876543210:Local") == 0);
+    for (int i = 0; i < 100; i++) { p2p_room_mods(c, mods); if (mods[0]) break; usleep(50000); }
+    CHECK(p2p_room_mods(c, mods) == 1 && !strcmp(mods, "11:22:0123456789ab:Timer 0:0:ba9876543210:Local"));
+    CHECK(p2p_server_command(b, "MODS 1:2:0123456789ab:X") == 0);   // not the creator: ERR, nothing changes
+    usleep(150000);
+    p2p_room_mods(b, mods);
+    CHECK(strstr(mods, "Timer") != NULL);
     CHECK(p2p_send(b, P2P_NET | 3, 11, 22, "b->c", 4) == 4 && wait_n(&ic, 1) && ic.src == (P2P_NET | 2) && !strcmp(ic.data, "b->c"));
     CHECK(ia.n == 0);
     CHECK(p2p_send(c, P2P_BROADCAST, 33, 44, "all", 3) == 3 && wait_n(&ia, 1) && wait_n(&ib, 1) && ia.src == (P2P_NET | 3));
@@ -82,6 +91,14 @@ static void room_test(int port, const char *pw, const char *admin, int blocked, 
     P2pPlayer q[P2P_MAX_PLAYERS];
     p2p_players(a, q, P2P_MAX_PLAYERS);
     CHECK(q[1].rtt_ms >= 0);
+
+    // a late joiner by autojoin: the login, then the room, with its mods, with no command from the player
+    Inbox id = {0};
+    P2p *d = client(&id, port, h[0][0] == '@' ? "@autojoiner" : "@x", pw);
+    p2p_server_autojoin(d, code);
+    for (int i = 0; i < 100 && !in_room(d); i++) usleep(50000);
+    CHECK(in_room(d) && p2p_room_mods(d, mods) == 1);
+    p2p_free(d);
 
     CHECK(p2p_server_command(c, "LEAVE") == 0);   // leaving the room through the server: the others drop it
     p2p_leave(c);

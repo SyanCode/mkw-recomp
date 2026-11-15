@@ -200,3 +200,23 @@ void ov_p2p_server_status(OvP2pServer *st) {
     memcpy(st->room, sv.room, sizeof st->room);
 }
 int ov_p2p_server_event(char out[192]) { return room ? p2p_server_poll(room, out) : 0; }
+int ov_p2p_room_mods(char out[704]) {
+    out[0] = 0;
+    return room ? p2p_room_mods(room, out) : 0;
+}
+
+void ov_p2p_autostart(void) {
+    const char *code = cfg_value("MKW_P2P_AUTOJOIN");
+    if (!ov_p2p() || !*code) return;
+    P2pServer sv = {0};
+    if (room) p2p_server_status(room, &sv);
+    if (sv.state == 2 && sv.room[0]) {   // the start screen's session is still ours (one process): nothing to do again
+        cfg_set("MKW_P2P_AUTOJOIN", "");
+        return;
+    }
+    if (ov_p2p_server_connect() == 0) {
+        p2p_server_autojoin(room, code);
+        rt_log("p2p: joining room %s on the server as the start screen asked", code);
+    }
+    cfg_set("MKW_P2P_AUTOJOIN", "");   // once: the next start is a normal one
+}

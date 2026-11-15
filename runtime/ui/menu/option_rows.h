@@ -52,6 +52,10 @@ void opt_disable_next(UiTextId note);
 // The rows from now on hang indented under the one before (a preset's rows), until opt_indent(false) or the page's end.
 void opt_indent(bool on);
 
+// The next row shows this label and description in place of its UiTextIds (a mod's name, a room's state); the row's id,
+// not its label, tells it from the others, so an id is still unique on the page.
+void opt_next_text(const char *label, const char *desc);
+
 // Page text that is not a row: a group heading in the accent colour, a wrapped paragraph (warn: the warning colour).
 void opt_group(UiTextId title);
 void opt_text(UiTextId text, bool warn = false);

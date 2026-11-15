@@ -77,8 +77,10 @@ static struct {
 } G = {};
 
 static char g_query[128], g_last_query[128];
+static int g_dl_mod, g_dl_file;   // the download under way: what mods_set_source records for the import
 static int g_open_mod, g_open_file;   // a 1-Click link's mod and file (mods_browse_open): its page, then the question
 
+int mods_browse_wants(void) { return g_open_mod || g_open_file; }
 void mods_browse_open(int mod_id, int file_id) { g_open_mod = mod_id, g_open_file = file_id; }
 static int g_sort, g_page = 1, g_loaded, g_selected = -1;
 
@@ -422,6 +424,7 @@ int mods_browse_draw(const char *exe_dir, SDL_Renderer *ren) {
         G.dl_path[0] = 0, G.finished = 0;
         SDL_UnlockMutex(G.lock);
         mods_pick(path, 1);
+        mods_set_source(g_dl_mod, g_dl_file);
         mods_import_start(exe_dir);
         return 1;
     }
@@ -557,6 +560,7 @@ int mods_browse_draw(const char *exe_dir, SDL_Renderer *ren) {
                     snprintf(fid, sizeof fid, "%d", c.id);
                     snprintf(dest, sizeof dest, "%s/mods/.downloads", cfg_game_dir());
                     const char *rest[] = {"download", mid, fid, dest, nullptr};
+                    g_dl_mod = info.id, g_dl_file = c.id;
                     start(exe_dir, JOB_DOWNLOAD, rest);
                     ImGui::CloseCurrentPopup();
                 }

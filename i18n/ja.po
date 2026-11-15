@@ -761,6 +761,133 @@ msgctxt "UI_MENU_P2P_SRV_NONE"
 msgid "none"
 msgstr ""
 
+msgctxt "UI_MENU_TAB_ONLINE"
+msgid "Online"
+msgstr ""
+
+msgctxt "UI_MENU_GROUP_P2P_SERVER"
+msgid "Rooms server"
+msgstr ""
+
+msgctxt "UI_MENU_GROUP_P2P_ROOM"
+msgid "Room"
+msgstr ""
+
+msgctxt "UI_MENU_GROUP_ROOMMODS"
+msgid "Mods of the room"
+msgstr ""
+
+msgctxt "UI_MENU_ONLINE_OFF"
+msgid ""
+"Online play is off. Turn it on above to race other PCs; the rows for rooms and servers appear "
+"then."
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_STATUS"
+msgid "This room's mods"
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_STATUS_DESC"
+msgid ""
+"The mods every player of this room must run. The ones you have on that the room does not name are "
+"switched off for the match and come back at the next start screen. Choose this row to compare "
+"again."
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_CHECKING"
+msgid "checking"
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_NONE"
+msgid "none required"
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_READY"
+msgid "all installed"
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_MISSING"
+msgid "%d to get"
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_ST_OK"
+msgid "installed"
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_ST_ENABLE"
+msgid "installed, off"
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_ST_DOWNLOAD"
+msgid "to download"
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_ST_UNAVAILABLE"
+msgid "not on GameBanana"
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_ROW"
+msgid ""
+"A mod the room requires. To download: choose this row to open its file on GameBanana and install "
+"it (this project hosts no mods). Not on GameBanana: you need the host's copy of the mod."
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_GET"
+msgid "Install the next missing mod"
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_GET_DESC"
+msgid ""
+"Opens the next missing mod's file on GameBanana in the start screen's Mods page, where you "
+"confirm the install. Come back here for the one after."
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_PLAY"
+msgid "Play with this room's mods"
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_PLAY_DESC"
+msgid ""
+"Puts your own mods aside, turns on the room's, builds the game again first if one of them changes "
+"its code (a few minutes), starts the game and keeps you in the room. Your own mods come back at "
+"the next start screen."
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_RESTORE"
+msgid "Put my own mods back"
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_RESTORE_DESC"
+msgid ""
+"Switches the room's mods off and your own back on, as they were before the match. Done by itself "
+"at the next start screen."
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_INGAME"
+msgid ""
+"Mods change only when the game starts. To race this room with its mods, close the game, join the "
+"room from the start screen (Settings > Online) and choose Play with this room's mods."
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_REQUIRED"
+msgid "required"
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_OPTIONAL"
+msgid "not required"
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_REQ"
+msgid "Require this mod"
+msgstr ""
+
+msgctxt "UI_MENU_ROOMMODS_REQ_DESC"
+msgid ""
+"For the room's creator: the mods marked required are what every player who joins must run. "
+"Players with other mods on have them switched off for the match, and those who lack one are "
+"offered its download."
+msgstr ""
+
 msgctxt "UI_MENU_VOLUME"
 msgid "Volume"
 msgstr "音量"

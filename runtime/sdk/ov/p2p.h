@@ -83,4 +83,9 @@ int p2p_server_command(P2p *p, const char *line);
 int p2p_server_join(P2p *p, const char *code);   // 0 sent, -1 not logged in or a bad code
 int p2p_server_poll(P2p *p, char out[192]);      // the next line the server sent that someone should read; 1 with one
 void p2p_server_status(P2p *p, P2pServer *st);
+// Joins the room as soon as the server accepts the login (a room the start screen chose); cleared once sent.
+void p2p_server_autojoin(P2p *p, const char *code);
+// The mods the server's room requires, as tools/mod/room_sync.py's entries separated by spaces ("" for none); 1 in a
+// server's room, else 0. They arrive just after joining and every few seconds, and change when the room's creator says.
+int p2p_room_mods(P2p *p, char out[704]);
 void p2p_debug_block_direct(P2p *p, int on);     // tests: drop what peers send straight, as a NAT that blocks them would

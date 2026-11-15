@@ -68,6 +68,12 @@ ModsState mods_state(void);
 // Enabled on/off: writes mkw.ini's MODS (enabled order is the overlay precedence) and re-applies every scanned
 // mod's switches, so deleting a mod folder cannot strand a switch on.
 void mods_toggle(const char *name, int on);
+// Where the next import came from, "gb:<mod>:<file>" for a GameBanana install (kept in mod.json, so a room can name
+// the mod and a player can fetch it); cleared by an import's end and by 0, 0.
+void mods_set_source(int mod_id, int file_id);
+// The whole MODS list at once, comma-separated in overlay order (a room's mods, the player's own put back): one merge, and
+// the rebuild marked for code mods that go on or off.
+void mods_set_list(const char *csv);
 // 1 when the named mod is enabled (its checkbox state).
 int mods_is_enabled(const char *name);
 // Recursive delete of our own import, then the MODS fix-up and switch re-apply of a toggle-off.

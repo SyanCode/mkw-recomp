@@ -51,6 +51,7 @@
 #include "ui/launcher/launcher_update.h"
 #include "ui/launcher/mods.h"
 #include "ui/launcher/mods_browse.h"
+#include "ui/launcher/mods_room.h"
 #include "ui/menu/menu_look.h"
 #include "ui/menu/option_rows.h"
 #include "ui/menu/settings_tabs.h"
@@ -79,6 +80,7 @@ static struct {
     Page page;
     int focus_main;                 // the main page's first button takes the cursor
     int result;                     // LAUNCHER_PLAY or LAUNCHER_QUIT once chosen; -1 running
+    int play_now;                   // the Online tab asked to play (Play with this room's mods): the main page presses Play once
     int play_after_setup;           // Play with code mods changed: the setup builds the game code, then the game
     int gb_open;                    // a 1-Click link: the Mods page's GameBanana tab first (launcher_gb_install)
     int save_pending;
@@ -610,8 +612,9 @@ static void page_main(float w, float h) {
     bool play = play_button(menu_text(UI_LAUNCH_PLAY), ImVec2(cw - chip_w - gap, play_h), ready);
     ImGui::SameLine(0, gap);
     if (profile_chip(ImVec2(chip_w, play_h))) L.page = PAGE_PLAYERS;
-    if (play || (play_test && ready)) {
+    if (play || (play_test && ready) || (L.play_now && ready)) {
         play_test = false;
+        L.play_now = 0;
         char state[PLAT_PATH_MAX + 32];
         snprintf(state, sizeof state, "%s/setup-state.json", cfg_game_dir());
         if (mods_code_changed() && L.tools && plat_file_exists(state)) {   // a set-up folder (not build/mkw)
@@ -1151,6 +1154,7 @@ static void page_mods(float w, float h) {
     }
     // two tabs: the player's mods, and GameBanana's (MKW_LAUNCHER_MODS_FIND=1 opens the second, for shots)
     static int find_tab = getenv("MKW_LAUNCHER_MODS_FIND") ? 1 : 0;
+    if (mods_browse_wants()) find_tab = 1;   // the Online tab asked for a room's mod: its GameBanana page
     if (L.gb_open) find_tab = 1, L.gb_open = 0;
     if (ImGui::RadioButton(menu_text(UI_MOD_TAB_INSTALLED), find_tab == 0)) find_tab = 0;
     ImGui::SameLine();
@@ -1640,6 +1644,9 @@ extern "C" int launcher_run(void) {
         }
     }
     L.tools = setup_available(L.exe_dir);
+    settings_set_launcher(L.exe_dir);   // the Online tab can compare, install and switch a room's mods
+    mods_refresh(L.exe_dir);
+    mods_room_restore();   // the player's own mods are back after a match with a room's
     if (!rt_game_present() && !L.shot_at) L.page = PAGE_FILES;
     pads_refresh();
     char state[PLAT_PATH_MAX * 3];
@@ -1676,6 +1683,8 @@ extern "C" int launcher_run(void) {
     rt_log("launcher: start screen, game files %s, setup tools %s", rt_game_present() ? "ready" : "not set up",
            L.tools ? "present" : "missing");
     for (long frame = 1; L.result < 0; frame++) {
+        if (settings_play_requested()) L.page = PAGE_MAIN, L.play_now = 1;   // Play with this room's mods
+        if (settings_mods_requested()) L.page = PAGE_MODS;
         if (L.play_after_setup && setup_state().finished) {   // the code mods' build ended: play if it went well
             L.play_after_setup = 0;
             if (setup_state().finished > 0) {

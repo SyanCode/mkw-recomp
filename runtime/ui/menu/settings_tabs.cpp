@@ -10,6 +10,9 @@
 #include <SDL3/SDL.h>
 
 #include "imgui.h"
+#include "ui/launcher/mods.h"
+#include "ui/launcher/mods_browse.h"
+#include "ui/launcher/mods_room.h"
 #include "ui/menu/binds_page.h"
 #include "ui/menu/option_rows.h"
 #include "ui/glyphs/glyphs.h"
@@ -389,9 +392,7 @@ static void tab_controls(float scale) {
     binds_after_page();
 }
 
-static void rows_p2p();   // below, with the action buttons' helpers
-
-// The languages, LAN play and the update check: the Game and Menu tabs of before, two rows each.
+// The languages, LAN play and the update check: the Game and Menu tabs of before, two rows each. Online play has its tab.
 static void tab_general(float scale) {
     opt_begin("##general", scale);
     row_game_lang();
@@ -406,8 +407,6 @@ static void tab_general(float scale) {
     };
     opt_choice("MKW_MENU_LANG", UI_MENU_MENU_LANG, langs, sizeof langs / sizeof *langs, UI_MENU_MENU_LANG_DESC);
     opt_toggle("MKW_LAN", UI_MENU_LAN, UI_MENU_LAN_DESC);   // sdk/ov/ov_socket.c, the lan set of recomp/patches-mkw.txt
-    opt_toggle("MKW_P2P", UI_MENU_P2P, UI_MENU_P2P_DESC);   // sdk/ov/ov_p2p.c: the same lobby over the internet
-    rows_p2p();
     opt_toggle("MKW_UPDATE_CHECK", UI_MENU_UPDATE_CHECK, UI_MENU_UPDATE_CHECK_DESC);   // ui/launcher/launcher_update.cpp
     opt_end();
 }
@@ -555,13 +554,9 @@ static void rows_p2p_server(const OvP2pStatus &st) {
     }
 }
 
-static void rows_p2p() {
-    if (!cfg_bool("MKW_P2P")) return;
+static void rows_p2p_room(const OvP2pStatus &st) {
     static ActionNote host_note, join_note, copy_note, add_note;
     char text[160], code[64];
-    OvP2pStatus st;
-    ov_p2p_status(&st);
-    opt_indent(true);
     if (opt_button("##p2p_host", UI_MENU_P2P_HOST, UI_MENU_P2P_HOST_DESC, action_value(host_note, UI_MENU_P2P_DONE)))
         action_done(host_note, ov_p2p_host() == 0);
     const char *join_value = join_note.result < 0 && plat_now_ns() <= join_note.until ? menu_text(UI_MENU_P2P_NO_CODE)
@@ -594,8 +589,135 @@ static void rows_p2p() {
     default: snprintf(text, sizeof text, "%s", menu_text(UI_MENU_P2P_ST_NONE)); break;
     }
     if (opt_button("##p2p_leave", UI_MENU_P2P_LEAVE, UI_MENU_P2P_LEAVE_DESC, text)) ov_p2p_leave();
+}
+
+// ---- the Online tab
+static char g_exe_dir[1024];   // the start screen's executable folder; empty in the game
+static bool g_play_req, g_mods_req;
+void settings_set_launcher(const char *exe_dir) { snprintf(g_exe_dir, sizeof g_exe_dir, "%s", exe_dir ? exe_dir : ""); }
+bool settings_play_requested(void) {
+    bool r = g_play_req;
+    g_play_req = false;
+    return r;
+}
+bool settings_mods_requested(void) {
+    bool r = g_mods_req;
+    g_mods_req = false;
+    return r;
+}
+
+// The mods of the server room we are in: what each needs, getting the missing ones, playing with exactly those, and (for
+// the room's creator) naming the ones everybody must run. tools/mod/room_sync.py compares, on a thread.
+static void rows_room_mods() {
+    OvP2pServer sv;
+    ov_p2p_server_status(&sv);
+    char req[704];
+    if (!sv.room[0] || !ov_p2p_room_mods(req)) return;
+    opt_group(UI_MENU_GROUP_ROOMMODS);
+    if (!g_exe_dir[0]) {   // in the game: mods change only at start
+        opt_text(UI_MENU_ROOMMODS_INGAME);
+        return;
+    }
+    static uint64_t scanned;
+    static int was_running;
+    uint64_t now = plat_now_ns();
+    if (now - scanned > 2000000000ull) mods_refresh(g_exe_dir), scanned = now;
+    ModsState ms = mods_state();
+    if (was_running && !ms.running) mods_room_plan_forget();   // an install ended: compare again
+    was_running = ms.running;
+    mods_room_plan_start(g_exe_dir, req);
+    RoomPlan pl = mods_room_plan();
+
+    char value[64];
+    int missing = 0, first = -1;
+    for (int i = 0; i < pl.n; i++)
+        if (!strcmp(pl.need[i].state, "download") || !strcmp(pl.need[i].state, "unavailable")) {
+            missing++;
+            if (first < 0 && !strcmp(pl.need[i].state, "download")) first = i;
+        }
+    if (pl.state == 1 || pl.state == 0) snprintf(value, sizeof value, "%s", menu_text(UI_MENU_ROOMMODS_CHECKING));
+    else if (!req[0]) snprintf(value, sizeof value, "%s", menu_text(UI_MENU_ROOMMODS_NONE));
+    else if (missing) snprintf(value, sizeof value, menu_text(UI_MENU_ROOMMODS_MISSING), missing);
+    else snprintf(value, sizeof value, "%s", menu_text(UI_MENU_ROOMMODS_READY));
+    if (opt_button("##rm_status", UI_MENU_ROOMMODS_STATUS, UI_MENU_ROOMMODS_STATUS_DESC, value)) mods_room_plan_forget();
+    for (int i = 0; i < pl.n; i++) {
+        const char *st = pl.need[i].state;
+        UiTextId word = !strcmp(st, "ok")         ? UI_MENU_ROOMMODS_ST_OK
+                        : !strcmp(st, "enable")   ? UI_MENU_ROOMMODS_ST_ENABLE
+                        : !strcmp(st, "download") ? UI_MENU_ROOMMODS_ST_DOWNLOAD
+                                                  : UI_MENU_ROOMMODS_ST_UNAVAILABLE;
+        char id[24];
+        snprintf(id, sizeof id, "##rm_need%d", i);
+        opt_next_text(pl.need[i].title, menu_text(UI_MENU_ROOMMODS_ROW));
+        if (opt_button(id, UI_MENU_ROOMMODS_STATUS, UI_MENU_ROOMMODS_ROW, menu_text(word)) && !strcmp(st, "download")) {
+            mods_browse_open(pl.need[i].mod, pl.need[i].file);
+            g_mods_req = true;
+        }
+    }
+    if (first >= 0 && opt_button("##rm_get", UI_MENU_ROOMMODS_GET, UI_MENU_ROOMMODS_GET_DESC, "")) {
+        mods_browse_open(pl.need[first].mod, pl.need[first].file);
+        g_mods_req = true;
+    }
+    if (pl.state == 2 && pl.ready && opt_button("##rm_play", UI_MENU_ROOMMODS_PLAY, UI_MENU_ROOMMODS_PLAY_DESC, "")) {
+        mods_room_apply();
+        cfg_set("MKW_P2P_AUTOJOIN", sv.room);   // a start that is not this process joins by itself
+        cfg_save();
+        g_play_req = true;
+    }
+    if (mods_room_active() && opt_button("##rm_restore", UI_MENU_ROOMMODS_RESTORE, UI_MENU_ROOMMODS_RESTORE_DESC, "")) {
+        mods_room_restore();
+        mods_room_plan_forget();
+    }
+
+    // the room's creator (or the admin) names the mods everybody must run: one row per mod that is on
+    if (strcmp(sv.role, "host") && strcmp(sv.role, "admin")) return;
+    static char required[MODS_MAX][MOD_NAME_MAX];
+    static int nrequired;
+    bool changed = false;
+    for (int i = 0; i < mods_count(); i++) {
+        const Mod *m = mods_at(i);
+        if (!m || !m->enabled) continue;
+        int at = -1;
+        for (int k = 0; k < nrequired; k++)
+            if (!strcmp(required[k], m->name)) at = k;
+        char id[96];
+        snprintf(id, sizeof id, "##rm_req_%s", m->name);
+        opt_next_text(m->title, menu_text(UI_MENU_ROOMMODS_REQ_DESC));
+        if (opt_button(id, UI_MENU_ROOMMODS_REQ, UI_MENU_ROOMMODS_REQ_DESC,
+                       menu_text(at >= 0 ? UI_MENU_ROOMMODS_REQUIRED : UI_MENU_ROOMMODS_OPTIONAL))) {
+            if (at >= 0) memmove(required[at], required[at + 1], (size_t)(--nrequired - at) * sizeof required[0]);
+            else if (nrequired < ROOM_MODS_MAX) snprintf(required[nrequired++], sizeof required[0], "%s", m->name);
+            changed = true;
+        }
+    }
+    if (changed) {
+        char csv[1024] = "";
+        for (int k = 0; k < nrequired; k++) strcat(strcat(csv, k ? "," : ""), required[k]);
+        mods_room_encode_start(g_exe_dir, csv);
+    }
+    char entries[704], cmd[760];
+    if (mods_room_encoded(entries, sizeof entries)) {
+        snprintf(cmd, sizeof cmd, "MODS %s", entries);
+        ov_p2p_server_command(cmd);
+    }
+}
+
+static void tab_online(float scale) {
+    opt_begin("##online", scale);
+    opt_toggle("MKW_P2P", UI_MENU_P2P, UI_MENU_P2P_DESC);   // sdk/ov/ov_p2p.c: the LAN lobby over the internet
+    if (!cfg_bool("MKW_P2P")) {
+        opt_text(UI_MENU_ONLINE_OFF);
+        opt_end();
+        return;
+    }
+    OvP2pStatus st;
+    ov_p2p_status(&st);
+    opt_group(UI_MENU_GROUP_P2P_SERVER);
     rows_p2p_server(st);
-    opt_indent(false);
+    opt_group(UI_MENU_GROUP_P2P_ROOM);
+    rows_p2p_room(st);
+    rows_room_mods();
+    opt_end();
 }
 
 static void tab_advanced(float scale) {
@@ -715,7 +837,7 @@ static void tab_hacks(float scale) {
 }
 
 static const UiTextId kTabNames[TAB_COUNT] = {UI_MENU_TAB_SCREEN,   UI_MENU_TAB_GRAPHICS, UI_MENU_TAB_SOUND,
-                                              UI_MENU_TAB_CONTROLS, UI_MENU_TAB_GENERAL,  UI_MENU_TAB_ADVANCED,
+                                              UI_MENU_TAB_CONTROLS, UI_MENU_TAB_GENERAL,  UI_MENU_TAB_ONLINE,   UI_MENU_TAB_ADVANCED,
                                               UI_MENU_TAB_HACKS};
 static int g_tab;               // the tab shown
 static int g_tab_request = -1;  // select this tab at the next layout; -1 none
@@ -764,6 +886,7 @@ void settings_tabs(float scale, float bottom) {
             case TAB_SOUND: tab_sound(scale); break;
             case TAB_CONTROLS: tab_controls(scale); break;
             case TAB_GENERAL: tab_general(scale); break;
+            case TAB_ONLINE: tab_online(scale); break;
             case TAB_ADVANCED: tab_advanced(scale); break;
             case TAB_HACKS: tab_hacks(scale); break;
             }

@@ -99,6 +99,8 @@ struct P2p {
     char srv_spec[160], handle[24], secret[72], password[72], token[24], srv_role[12], room_code[8];
     int srv_resolve, srv_set, srv_state;   // 0 off / 1 logging in / 2 logged in
     uint64_t srv_tx, srv_rx;
+    char room_mods[704];           // the mods the server's room requires, entries separated by spaces
+    char autojoin[16];             // a room to join as soon as the server accepts the login (then cleared)
     char events[8][192];
     int ev_n;
     int block_direct;              // tests: drop what peers send straight, as a NAT that blocks them would
@@ -476,8 +478,15 @@ static void srv_line(P2p *p, char *line) {
         memset(p->peers, 0, sizeof p->peers);
         p->role = 3, p->slot = (uint8_t)atoi(w[2]);
         snprintf(p->room_code, sizeof p->room_code, "%s", w[1]);
+        p->room_mods[0] = 0;
         rt_log("p2p: joined room %s (%s) as player %d (100.77.0.%d)", w[1], w[4], p->slot, p->slot);
         ev_push(p, "JOINED");
+    } else if (!strcmp(w[0], "ROOMMODS") && nw >= 3 && p->role == 3 && !strcmp(w[1], p->room_code)) {
+        p->room_mods[0] = 0;   // ROOMMODS code n entry...
+        for (int i = 3; i < nw; i++) {
+            size_t l = strlen(p->room_mods);
+            snprintf(p->room_mods + l, sizeof p->room_mods - l, "%s%s", l ? " " : "", w[i]);
+        }
     } else if (!strcmp(w[0], "PEERS") && nw >= 3 && p->role == 3 && !strcmp(w[1], p->room_code)) {
         srv_peers(p, w, nw);
     } else if (!strcmp(w[0], "KICKED")) {
@@ -540,6 +549,13 @@ static void tick(P2p *p) {
             snprintf(b, sizeof b, "HELLO %s %s %s", p->handle, p->secret, p->password);
             srv_say(p, b);
             p->srv_state = 1, p->srv_tx = now;
+        } else if (p->srv_state == 2 && p->autojoin[0]) {
+            char b[120];
+            snprintf(b, sizeof b, "JOIN %s %u.%u.%u.%u:%u", p->autojoin, p->loc.ip >> 24, p->loc.ip >> 16 & 255,
+                     p->loc.ip >> 8 & 255, p->loc.ip & 255, p->lport);
+            srv_cmd(p, b);
+            p->autojoin[0] = 0;
+            p->srv_tx = now;
         } else if (p->srv_state == 2 && now - p->srv_tx >= 5000) {
             srv_cmd(p, "PING");
             p->srv_tx = now;
@@ -944,6 +960,20 @@ void p2p_server_status(P2p *p, P2pServer *st) {
     snprintf(st->handle, sizeof st->handle, "%s", p->handle);
     snprintf(st->room, sizeof st->room, "%s", p->room_code);
     plat_mutex_unlock(&p->lock);
+}
+
+void p2p_server_autojoin(P2p *p, const char *code) {
+    plat_mutex_lock(&p->lock);
+    snprintf(p->autojoin, sizeof p->autojoin, "%s", code && strlen(code) <= 12 && !strchr(code, ' ') ? code : "");
+    plat_mutex_unlock(&p->lock);
+}
+
+int p2p_room_mods(P2p *p, char out[704]) {
+    plat_mutex_lock(&p->lock);
+    snprintf(out, 704, "%s", p->room_mods);
+    int n = p->role == 3;
+    plat_mutex_unlock(&p->lock);
+    return n;
 }
 
 void p2p_debug_block_direct(P2p *p, int on) { p->block_direct = on; }

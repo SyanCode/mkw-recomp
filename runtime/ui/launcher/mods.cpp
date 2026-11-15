@@ -35,6 +35,7 @@ static struct {
     int pick_is_zip;
     char name[MOD_NAME_MAX];    // the rename field; empty: import.py takes the mod's own name
     char variant[512];          // the mod chosen from an archive with several (import.py --variant)
+    char source[40];            // where the pick came from, "gb:<mod>:<file>" (import.py --source); empty for a pick of the player's
     // merge (tools/mod/merge.py, same child-process pattern; reruns after every toggle/import/delete)
     SDL_Thread *mthread;
     SDL_Process *mproc;
@@ -395,6 +396,35 @@ static void romfs_root(char *out, size_t cap) {
         snprintf(out, cap, "%s/romfs", cfg_game_dir());
 }
 
+void mods_set_source(int mod_id, int file_id) {
+    if (mod_id > 0 && file_id > 0) snprintf(G.source, sizeof G.source, "gb:%d:%d", mod_id, file_id);
+    else G.source[0] = 0;
+}
+
+// Sets the whole MODS list at once (names in overlay order, comma-separated; names that are not mods are dropped):
+// the mods that change the game's code mark the rebuild as a toggle would, then one merge for the lot.
+void mods_set_list(const char *csv) {
+    char out[4096] = "", want[4096];
+    snprintf(want, sizeof want, "%s", csv ? csv : "");
+    for (char *t = strtok(want, ","); t; t = strtok(NULL, ",")) {
+        int known = 0;
+        for (int i = 0; i < G.n && !known; i++) known = !strcmp(G.mods[i].name, t);
+        if (known) strcat(strcat(out, out[0] ? "," : ""), t);
+    }
+    for (int i = 0; i < G.n; i++) {   // a code mod that goes on or off is built again before the next start
+        char pat[MOD_NAME_MAX + 2];
+        snprintf(pat, sizeof pat, ",%s,", G.mods[i].name);
+        char hay[4100], now[4100];
+        snprintf(hay, sizeof hay, ",%s,", out);
+        snprintf(now, sizeof now, ",%s,", cfg_get("MKW_MODS") ? cfg_get("MKW_MODS") : "");
+        if ((strstr(hay, pat) != nullptr) != (strstr(now, pat) != nullptr)) mark_rebuild(G.mods[i].name);
+    }
+    cfg_set("MKW_MODS", out);
+    mods_refresh(G.exe_dir);
+    mods_apply();
+    mods_merge_start(G.exe_dir);
+}
+
 void mods_toggle(const char *name, int on) { set_enabled(name, on); mods_merge_start(G.exe_dir); }
 
 int mods_is_enabled(const char *name) {
@@ -556,7 +586,7 @@ void mods_import_variant(const char *exe_dir, const char *variant) {
 }
 
 void mods_clear_pick(void) {
-    G.pick[0] = G.name[0] = G.variant[0] = 0;
+    G.pick[0] = G.name[0] = G.variant[0] = G.source[0] = 0;
     G.finished = 0;
     G.done[0] = G.code[0] = G.error[0] = 0;
 }
@@ -645,10 +675,11 @@ void mods_import_start(const char *exe_dir) {
     exefs_root(exefs, sizeof exefs);
     const char *kind = G.pick_is_zip ? "--zip" : "--folder";
     // the name and the variant are optional: each pair only when it has a value
-    const char *args[16] = {python, "-I", script, "--game", cfg_game_dir(), "--romfs", romfs, "--exefs", exefs, kind, G.pick};
+    const char *args[20] = {python, "-I", script, "--game", cfg_game_dir(), "--romfs", romfs, "--exefs", exefs, kind, G.pick};
     int na = 11;
     if (G.name[0]) args[na++] = "--name", args[na++] = G.name;
     if (G.variant[0]) args[na++] = "--variant", args[na++] = G.variant;
+    if (G.source[0]) args[na++] = "--source", args[na++] = G.source;
     args[na] = nullptr;
     rt_log("mods: %s %s --game %s %s %s%s%s", python, script, cfg_game_dir(), kind, G.pick,
            G.name[0] ? " --name " : "", G.name[0] ? G.name : "");

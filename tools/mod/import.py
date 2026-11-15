@@ -135,6 +135,8 @@ def main():
     ap.add_argument("--folder", dest="folder")
     ap.add_argument("--name", default="")
     ap.add_argument("--variant", default="", help="the mod to take from an archive with several (as listed)")
+    ap.add_argument("--source", default="",
+                    help="where the mod came from, 'gb:<mod id>:<file id>' (GameBanana): kept in mod.json for room sync")
     ap.add_argument("--exefs", default="",
                     help="the game's exefs folder (default: <game>/exefs); its main names the build id")
     ap.add_argument("--build-id", default="",
@@ -261,6 +263,9 @@ def main():
                 "romfs_files": n_romfs, "has_exefs": has_exefs, "exefs_builds": builds,
                 "exefs_match": matching if has_exefs else True, "switches": switches,
                 "warnings": sorted(warnings)}
+        src_parts = args.source.split(":")
+        if len(src_parts) == 3 and src_parts[0] == "gb" and src_parts[1].isdigit() and src_parts[2].isdigit():
+            meta["source"] = {"gamebanana": {"mod": int(src_parts[1]), "file": int(src_parts[2])}}
         if shipped.get("patches"):
             meta["patches"] = shipped["patches"]
         if image:

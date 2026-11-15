@@ -173,6 +173,16 @@ one on or off rebuilds it before you play (a few minutes). Two mods that change 
 file, and the page asks which one wins where both change the same file. The page warns about mods that replace the
 game's graphics settings or shaders, which the port handles its own way.
 
+### Mods in online rooms
+
+Everybody in a room has to run the same mods. On a rooms server (`tools/server/`) the player who made a room marks, in
+Settings > **Online**, which of the mods they have on are required; whoever joins sees what the room asks for, what is
+already installed, and what is missing. **Install the next missing mod** opens that mod's file on GameBanana in the Mods
+page (this project hosts no mods; a mod that is not on GameBanana must be had from its owner), and **Play with this room's
+mods** puts your own mods aside, turns on exactly the room's, builds the game again first if one of them changes its code,
+and starts the game in the room. Your own mods come back at the next start screen. Mods change only when the game starts,
+so the room has to be joined from the start screen to play with its mods; in the game the tab only shows what the room needs.
+
 Mods are made by other people and are not tested by this project: one can crash the game or damage your save. Read a
 mod's page before installing it, keep a copy of your save, and report a mod's problems to its author; when you report
 a bug here, say which mods were on (the log lists them), or try again without them first.

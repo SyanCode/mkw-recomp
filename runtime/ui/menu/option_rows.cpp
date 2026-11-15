@@ -57,8 +57,15 @@ struct Desc { char text[512]; };
 static Desc g_hover, g_focus, g_first, g_shown;
 
 // disabled: the note of a row opt_disable_next greyed out, else NULL.
-static void desc_set(Desc &d, UiTextId desc, const char *key, const CfgMeta *m, const char *disabled) {
-    int n = snprintf(d.text, sizeof d.text, "%s", menu_text(desc));
+static char g_dyn_label[96], g_dyn_desc[320];   // opt_next_text: the next row's own words
+
+void opt_next_text(const char *label, const char *desc) {
+    snprintf(g_dyn_label, sizeof g_dyn_label, "%s", label ? label : "");
+    snprintf(g_dyn_desc, sizeof g_dyn_desc, "%s", desc ? desc : "");
+}
+
+static void desc_set(Desc &d, const char *desc, const char *key, const CfgMeta *m, const char *disabled) {
+    int n = snprintf(d.text, sizeof d.text, "%s", desc);
     if (n < 0 || n >= (int)sizeof d.text) return;
     if (disabled)
         snprintf(d.text + n, sizeof d.text - n, "\n\n%s", disabled);
@@ -66,6 +73,10 @@ static void desc_set(Desc &d, UiTextId desc, const char *key, const CfgMeta *m, 
         snprintf(d.text + n, sizeof d.text - n, "\n\n%s %s", menu_text(UI_MENU_SET_BY_ENV), key);
     else if (m && !m->live && !g_look->quiet)
         snprintf(d.text + n, sizeof d.text - n, "\n\n%s", menu_text(UI_MENU_AFTER_RESTART));
+}
+
+static void desc_set(Desc &d, UiTextId desc, const char *key, const CfgMeta *m, const char *disabled) {
+    desc_set(d, menu_text(desc), key, m, disabled);
 }
 
 void opt_focus_first(void) { g_focus_req = true; }
@@ -154,6 +165,8 @@ static int row(const char *key, UiTextId label, UiTextId desc, const RowView &v)
     const char *disabled = g_disable_next ? menu_text(g_disable_note) : NULL;
     g_disable_next = false;
     bool off = disabled || cfg_from_env(key) != 0;
+    const char *label_text = g_dyn_label[0] ? g_dyn_label : menu_text(label);
+    const char *desc_text = g_dyn_desc[0] ? g_dyn_desc : menu_text(desc);
     ImGui::PushID(key);
     if (g_indent) ImGui::Indent(24 * g_scale);
     ImVec2 p = ImGui::GetCursorScreenPos();
@@ -190,9 +203,9 @@ static int row(const char *key, UiTextId label, UiTextId desc, const RowView &v)
             ImGui::SetKeyOwner(k, ImGui::GetItemID());
         }
     }
-    if (foc && !g_mouse) desc_set(g_focus, desc, key, m, disabled);
-    if (hov) desc_set(g_hover, desc, key, m, disabled);
-    if (!g_first.text[0]) desc_set(g_first, desc, key, m, disabled);
+    if (foc && !g_mouse) desc_set(g_focus, desc_text, key, m, disabled);
+    if (hov) desc_set(g_hover, desc_text, key, m, disabled);
+    if (!g_first.text[0]) desc_set(g_first, desc_text, key, m, disabled);
 
     ImDrawList *dl = ImGui::GetWindowDrawList();
     ImFont *font = ImGui::GetFont();
@@ -234,7 +247,7 @@ static int row(const char *key, UiTextId label, UiTextId desc, const RowView &v)
     }
     // the label and its note, clipped before the value
     ImVec4 clip(p.x, p.y, value_left - fs * 0.6f, p.y + h);
-    dl->AddText(font, fs, ImVec2(p.x + pad, ty), off ? g_look->off : g_look->label, menu_text(label), NULL, 0,
+    dl->AddText(font, fs, ImVec2(p.x + pad, ty), off ? g_look->off : g_look->label, label_text, NULL, 0,
                 &clip);
     const char *note = disabled                          ? disabled
                      : off                               ? menu_text(UI_MENU_SET_BY_ENV)
@@ -242,11 +255,12 @@ static int row(const char *key, UiTextId label, UiTextId desc, const RowView &v)
                                                          : NULL;
     if (note) dl->AddText(font, small, ImVec2(p.x + pad, ny), off ? g_look->note_off : g_look->dim, note);
     if (g_look->quiet && !off && v.value[0] && !v.is_default) {   // changed from the default: a dot after the label
-        float dx = p.x + pad + ImGui::CalcTextSize(menu_text(label)).x + fs * 0.5f, dr = fs * 0.14f;
+        float dx = p.x + pad + ImGui::CalcTextSize(label_text).x + fs * 0.5f, dr = fs * 0.14f;
         if (dx + dr < value_left - fs * 0.6f) dl->AddCircleFilled(ImVec2(dx, ty + fs * 0.55f), dr, g_look->changed, 12);
     }
     if (g_indent) ImGui::Unindent(24 * g_scale);
     ImGui::PopID();
+    g_dyn_label[0] = g_dyn_desc[0] = 0;
     return off ? 0 : step;
 }
 

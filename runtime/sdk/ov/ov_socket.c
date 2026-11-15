@@ -243,6 +243,7 @@ static void ov_init(Cpu *c) {
     }
 #endif
     ready = 1;
+    ov_p2p_autostart();
     ret_x(c, 0);
 }
 static void ov_finalize(Cpu *c) { ret_x(c, 0); }   // sockets stay open until Close, as the game closes them first

@@ -43,9 +43,9 @@ static const char *const known[] = {
     "FLIGHT_THUMBS", "FPS", "FRAMEGEN", "FREEZE_IDLE", "GLYPH_DUMP", "FREE_CORES", "FULLSCREEN", "GAME_DIR", "GPL", "GPL_DRAW_BUILD", "GPU",
     "GPU_CRUMBS", "GPU_CRUMBS_DRAW", "HDR", "HDR_FAKE", "GPU_INDEX", "GPU_MEM_LIMIT", "GPU_NAME", "INPUT", "INPUT_RECORD", "INPUT_SCRIPT", "LAN", "LAN_IP", "LANG",
     "LOCALE", "MEMORY", "MESH_COMPUTE", "MENU_LANG", "MENU_TEST",
-    "MENU_TEST_DIR", "MENU_TEST_SET", "MINIMAL_LAYOUT", "MIRROR_GAP", "MODS", "MODS_ACK", "MODS_PLAYED", "MOTION",
+    "MENU_TEST_DIR", "MENU_TEST_SET", "MINIMAL_LAYOUT", "MIRROR_GAP", "MODS", "MODS_ACK", "MODS_BACKUP", "MODS_PLAYED", "MOTION",
     "MOUSE_SENS", "PLAYER",   // PLAYER: the launcher's choice (core/base/players.h), no row: Reset all leaves it
-    "ONE_PER_CORE", "OPERATION_MODE", "P2P", "P2P_HANDLE", "P2P_LOCAL_IP", "P2P_PORT", "P2P_SECRET", "P2P_SERVER", "P2P_SERVER_PASSWORD", "P2P_STUN", "PAD_LAYOUT", "PERF_OVERLAY", "PERF_SLOW_MS", "PICTURE_FIT", "PIPELINE_CACHE", "PIPE_MEMO", "PIPE_PREBUILD", "PIPE_SKIP", "PIPE_STALL", "PIPE_SYNC", "PIPE_TRACE", "PIPE_WAIT", "PIPE_WORKERS",
+    "ONE_PER_CORE", "OPERATION_MODE", "P2P", "P2P_AUTOJOIN", "P2P_HANDLE", "P2P_LOCAL_IP", "P2P_PORT", "P2P_SECRET", "P2P_SERVER", "P2P_SERVER_PASSWORD", "P2P_STUN", "PAD_LAYOUT", "PERF_OVERLAY", "PERF_SLOW_MS", "PICTURE_FIT", "PIPELINE_CACHE", "PIPE_MEMO", "PIPE_PREBUILD", "PIPE_SKIP", "PIPE_STALL", "PIPE_SYNC", "PIPE_TRACE", "PIPE_WAIT", "PIPE_WORKERS",
     "PROBE", "PROFILE", "PROFILE_CHAINS", "PROFILE_DIR", "PROFILE_FRAMES",
     "PROFILE_MAIN", "PROFILE_RENDER", "PUSH_SKIP", "PUSH_STAGE", "RDOC", "RDOC_DIR", "RDOC_DLL", "REEXEC",
     "BIND_XF", "REG_LATE", "REG_QUEUED", "REPLAY_ASYNC", "USNAP_CMP",
@@ -63,7 +63,7 @@ static const struct { const char *key, *section; } sections[] = {
     {"GPU_INDEX", "display"}, {"UPSCALER", "display"}, {"HDR", "display"}, {"SHARPNESS", "display"}, {"PICTURE_FIT", "display"},
     {"DEVICE_PROFILE", "display"}, {"RESOLUTION", "display"}, {"ASPECT", "display"}, {"FPS", "display"}, {"FRAMEGEN", "display"},
     {"QUALITY", "graphics"}, {"ANISO", "graphics"}, {"TEX_QUALITY", "graphics"}, {"DETAIL_DISTANCE", "graphics"}, {"SHADOW_SIZE", "graphics"},
-    {"MENU_LANG", "language"}, {"LANG", "language"}, {"OPERATION_MODE", "language"}, {"LAN", "language"}, {"P2P", "language"}, {"P2P_PORT", "language"}, {"P2P_STUN", "language"}, {"P2P_SERVER", "language"}, {"P2P_HANDLE", "language"},
+    {"MENU_LANG", "language"}, {"LANG", "language"}, {"OPERATION_MODE", "language"}, {"LAN", "language"}, {"P2P", "language"}, {"P2P_PORT", "language"}, {"P2P_STUN", "language"}, {"P2P_SERVER", "language"}, {"P2P_AUTOJOIN", "language"}, {"MODS_BACKUP", "language"}, {"P2P_HANDLE", "language"},
     {"P2P_SECRET", "language"}, {"P2P_SERVER_PASSWORD", "language"},
     {"VOLUME", "audio"}, {"AUDIO_CHANNELS", "audio"}, {"BACKGROUND_MUTE", "audio"},
     {"MOTION", "input"}, {"RUMBLE_STRENGTH", "input"}, {"RUMBLE_CURVE", "input"}, {"RUMBLE_TRIGGERS", "input"},
@@ -113,6 +113,7 @@ static const CfgMeta metas[] = {
     {"P2P_STUN", "stun.l.google.com:19302,stun.cloudflare.com:3478", NULL, RESTART},   // where the public address is asked; empty: a room for one local network
     {"P2P_PORT", "0", "0..65535", RESTART},   // the room's UDP port: 0 any, or the one forwarded on the router
     {"P2P_SERVER", "", NULL, LIVE},   // a rooms and relay server (tools/server/mkw_server.py): "host" or "host:port"
+    {"P2P_AUTOJOIN", "", NULL, RESTART},   // a server room to join when the game starts: the start screen's Play with a room's mods sets it, the game clears it
     {"P2P_HANDLE", "", NULL, LIVE},   // the player's @name on that server
     {"P2P_SECRET", "", NULL, LIVE},   // made by the game on the first login: it proves the @name is ours (kept out of bug reports)
     {"P2P_SERVER_PASSWORD", "", NULL, LIVE},   // the server's, when it has one (kept out of bug reports)
@@ -129,6 +130,7 @@ static const CfgMeta metas[] = {
     {"MOUSE_SENS", "1", "0..10", LIVE}, {"STICK_DEADZONE", "8", "0..40", LIVE}, {"SWITCH2", "0", "0|1|2", RESTART},
     {"MENU_LANG", "", "en|ja|fr|de|it|es|nl|pt|pt-BR|ru|zh-Hans|zh-Hant|ko|es-419|ca|gl|eu|pl|tr|uk|th", LIVE}, {"UPDATE_CHECK", "1", "0|1", LIVE},
     {"MODS", "", NULL, RESTART},   // the Mods page's enabled mods, comma-separated in load order; not a menu row
+    {"MODS_BACKUP", "", NULL, LIVE},   // the player's own mods while a room's are on: the start screen puts them back (ui/launcher/mods.cpp)
     {"MODS_ACK", "0", "0|1", LIVE},   // the player ticked the Mods page's "I understand" once
     {"MODS_PLAYED", "", NULL, LIVE},   // the mods of the last start: a new set backs the save up first (launcher)
     {"GAME_DIR", "", NULL, RESTART},   // unset: beside the executable; the launcher remembers the selection there

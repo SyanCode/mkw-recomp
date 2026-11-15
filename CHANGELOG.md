@@ -40,6 +40,15 @@ its issue, #N), `### Tested` (what was run from the packages before publishing) 
   and relayed traffic. When two players' routers block each other, the server relays their packets (still tagged by the
   room's secret). The menu's Online rows get the server's address, the player's @handle, connect, create, list, invite and
   accept. The secrets stay out of "Copy system info".
+- **Mods in online rooms, and an Online tab** (Settings > Online): a room on a rooms server can require mods, which every
+  player must run. The room's creator marks the mods they have on that are required; a player who joins sees each one as
+  installed, off, to download or not on GameBanana, installs the missing ones from GameBanana one button at a time, and
+  **Play with this room's mods** puts their own mods aside, turns on exactly the room's (building the game again first
+  when one changes its code), starts the game and keeps them in the room; their own mods come back at the next start
+  screen. Mods are told apart by a fingerprint of their content, not their folder name, and a GameBanana install now
+  keeps where it came from in `mod.json`. The online rows move from General into their own tab, in groups: the rooms
+  server, the room, the room's mods. Not tested with the game: only the server, the client over the loopback and the
+  mod comparison are.
 - **The Game files page follows what is installed** (#359 by @ViniciusStanula): with nothing set up it is three
   numbered steps — the player's copy, how its RomFS is kept as two cards saying what each costs, then Set up with the
   folder it installs to — and once installed a card of what is there (game version, the port version that set it up,

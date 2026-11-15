@@ -46,7 +46,9 @@ void ov_p2p_server_disconnect(void);
 int ov_p2p_server_command(const char *line);   // a line of the server's protocol; 0 sent, -1 not logged in
 int ov_p2p_server_join(const char *code);      // 0 sent, -1
 void ov_p2p_server_status(OvP2pServer *st);
-int ov_p2p_server_event(char out[192]);        // the next line the server sent for the player (ERR, ROOMS, INVITED...); 1 with one
+int ov_p2p_server_event(char out[192]);
+int ov_p2p_room_mods(char out[704]);   // the mods of the server room we are in, entries separated by spaces; 1 in a server room
+void ov_p2p_autostart(void);           // game start: MKW_P2P_AUTOJOIN, if set, logs in to the server and joins that room        // the next line the server sent for the player (ERR, ROOMS, INVITED...); 1 with one
 
 #ifdef __cplusplus
 }
