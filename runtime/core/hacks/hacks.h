@@ -1,6 +1,7 @@
 // Hacks that the console does not have, for playing and above all for developing faster: each
 // one off by default, with its MKW_* key for the scripts and its row in the Hacks tab (ui/menu/settings_tabs.cpp).
 #pragma once
+#include <stddef.h>
 #include <stdint.h>
 
 // ---- turbo (turbo.c): the game runs `speed` times faster. MKW_TURBO = off | hold | toggle (F2) | on | until,
@@ -29,3 +30,7 @@ void freeze_present(void);               // the game's present: waits while froz
 
 // ---- unlock everything (unlock.c): MKW_UNLOCK_ALL=1 edits Play/account.sav when the game opens it
 int unlock_save(uint8_t *save, uint64_t size);  // the changes made; 0 for a save of another layout
+
+// ---- Classic Grand Prix (classic.c): MKW_CLASSIC_GP=1, every race of a Grand Prix cup is laps on one course
+void classic_seen(void *p, size_t n);      // ov_zstd.c: n bytes the host zstd decoder wrote (the archive, when it is)
+void classic_poll(void);                   // menu.cpp, each frame: the setting changed, the game's cups follow

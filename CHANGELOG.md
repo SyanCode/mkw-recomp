@@ -66,6 +66,12 @@ its issue, #N), `### Tested` (what was run from the packages before publishing) 
 - **The start screen says how the last game ended**: when it stopped with a known problem, it names the issue that
   follows it (no need to report it again) or the release that fixes it; an unknown error gets a button to the bug
   form, asking for `logs/mkw.log`.
+- **20 and 15 fps, at the race's real speed, and Low latency**: Settings > Graphics > Frame rate gains 20 and 15, and
+  Automatic now drops to them (it stopped at 30) when frames take too long, so a slow graphics card no longer plays
+  the race in slow motion: at 15 the time trial's clock runs at 0.998x real time and the karts drive as at 60. With
+  Frame generation at 2x, 15 fps shows as 30. New **Low latency** (on): the game used to prepare up to two frames
+  ahead of the screen; now it starts each one only as early as its work needs, measured frame by frame. On a Radeon
+  660M at 15 fps a controller read reached its frame's display time in about 115 ms instead of 200.
 - **Issues**: a report of a known error is closed at once as its duplicate (a reply from its author reopens it), and
   a report on an older release, quiet for 3 days, is asked to try the latest and closed after 7 days without a reply.
 - **Motion controls for every player** (discussion 302): the gyroscope and accelerometer were read from player 1's
@@ -102,6 +108,12 @@ its issue, #N), `### Tested` (what was run from the packages before publishing) 
   midway (8 of 8, against 30 % of the game's fragment shaders). A discarded pixel now stays as a helper to the end of
   the shader (Vulkan's demote, as Switch emulators and DXVK do) instead of ending in the middle of it. Verified on the
   captures (same images) and not on an NVIDIA card.
+- **The GPU hang report comes before amdgpu resets the GPU** (#327 by @andreknieriem): on the Steam Deck the kernel
+  resets a GPU job after 5 s (SteamOS's `amdgpu.lockup_timeout`), as soon as the report of #297 was due, so three hangs
+  ended with no line in `mkw.log`. On amdgpu the report now comes after two fifths of that timeout (2 s on the Deck);
+  an unset or unavailable kernel timeout uses 1 s (the documented default has been as short as 2 s), elsewhere it stays
+  at 5 s, and `MKW_GPU_HANG_MS` sets it. Each stuck episode reports once, not only the first, and one the GPU finishes
+  after all says so ("it was slow, not hung").
 
 ## 0.1.11
 

@@ -130,6 +130,9 @@ Beyond the console, all optional and off (or at the console's value) by default:
   screens, VSync, mailbox or immediate presentation.
 - **Frame generation**: frames made between the game's (a race at 30 fps shown at 60, or at 240 on a 240 Hz screen).
   Smoother, not faster: the picture is up to one frame later, and fast motion and the minimap can smear.
+- **Frame rate**: 20 and 15 fps besides the console's 60 and 30; Automatic drops to them when frames take too long,
+  so a slow graphics card keeps the race at its real speed. **Low latency** (on by default: it changes no picture,
+  only when each frame starts) starts each frame as late as the card allows, so a press reaches the screen sooner.
 - **Graphics**: texture filtering and quality, detail distance and shadow quality above or below the console's.
 - **Sound**: 5.1 surround.
 - **Controls**: every key and button rebindable, mouse camera, Nintendo, Xbox or PlayStation button icons, motion
