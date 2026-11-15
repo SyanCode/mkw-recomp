@@ -575,6 +575,22 @@ int plat_clipboard_set(const char *utf8) {
     return ok;
 }
 
+int plat_clipboard_get(char *out, size_t cap) {
+    if (!cap) return 0;
+    out[0] = 0;
+    int ok = 0;
+    if (!IsClipboardFormatAvailable(CF_UNICODETEXT) || !OpenClipboard(NULL)) return 0;
+    HANDLE h = GetClipboardData(CF_UNICODETEXT);
+    const wchar_t *w = h ? GlobalLock(h) : NULL;
+    if (w) {
+        ok = WideCharToMultiByte(CP_UTF8, 0, w, -1, out, (int)cap, NULL, NULL) != 0;   // cut when it does not fit: no zero
+        out[cap - 1] = 0;
+        GlobalUnlock(h);
+    }
+    CloseClipboard();
+    return ok && out[0];
+}
+
 static DWORD WINAPI open_folder_main(void *arg) {
     ShellExecuteW(NULL, L"open", arg, NULL, NULL, SW_SHOWNORMAL);
     free(arg);

@@ -59,6 +59,7 @@ typedef int HostSock;
 #include "cfg.h"
 #include "host.h"
 #include "ov.h"
+#include "ov_p2p.h"
 #include "platform/platform.h"
 
 // Linux errno values the game reads (its numbering on every host)
@@ -100,6 +101,7 @@ static int ev_guest(int h) { return h & 0x3f; }
 typedef struct {
     int used, nonblock, eventfd;
     HostSock s;
+    uint16_t bport;   // MKW_P2P: the port the socket is bound to on the loopback (host order), 0 before
 } Slot;
 // The table is read and written under one lock: a Poll on one thread while another opens or closes a slot sees either
 // the old socket or the new one, whole. Calls use a copy of the slot, so no call holds the lock while it waits.
@@ -111,7 +113,7 @@ static _Thread_local int last_errno;   // per host thread: each guest thread is 
 static void fail(int e) { last_errno = e; }
 
 #define B_ENETDOWN 50   // what main's stub answered: the console's BSD errno for a network that is down
-int ov_lan(void) { return cfg_bool("MKW_LAN"); }
+int ov_lan(void) { return cfg_bool("MKW_LAN") || cfg_bool("MKW_P2P"); }
 // MKW_LAN off: the call fails as main's stub did
 #define LAN_OR_DOWN(c)                                                                                                \
     do {                                                                                                               \
@@ -308,6 +310,18 @@ static void ov_shutdown(Cpu *c) {
     ret_x(c, (uint64_t)(int64_t)r);
 }
 
+// MKW_P2P: remembers which port a socket ended up on, to name the sender of what it sends into the room
+static uint16_t slot_note_port(int fd, HostSock s) {
+    struct sockaddr_in me;
+    socklen_t l = sizeof me;
+    uint16_t port = 0;
+    if (!getsockname(s, (struct sockaddr *)&me, &l)) port = ntohs(me.sin_port);
+    plat_mutex_lock(&slots_lock);
+    if (fd >= 0 && fd < NSOCK && slots[fd].used && slots[fd].s == s) slots[fd].bport = port;
+    plat_mutex_unlock(&slots_lock);
+    return port;
+}
+
 // int Bind(int fd, const sockaddr *addr, socklen_t len)
 static void ov_bind(Cpu *c) {
     Slot sl;
@@ -315,8 +329,13 @@ static void ov_bind(Cpu *c) {
     int r = -1;
     LAN_OR_DOWN(c);
     if (!slot_get((int)arg_x(c, 0), &sl) && !addr_in(arg_p(c, 1), (uint32_t)arg_x(c, 2), &a) && !lan_check(&a, "Bind")) {
+        // MKW_P2P: the game binds its own address in the room (or any); the host has no such address, and the loopback
+        // is where the room's datagrams arrive (ov_p2p.c)
+        if (ov_p2p() && (!a.sin_addr.s_addr || ov_p2p_is_virtual(ntohl(a.sin_addr.s_addr))))
+            a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         r = bind(sl.s, (struct sockaddr *)&a, sizeof a);
         if (r < 0) fail(host_errno());
+        else if (ov_p2p()) slot_note_port((int)arg_x(c, 0), sl.s);
     }
     ret_x(c, (uint64_t)(int64_t)r);
 }
@@ -349,6 +368,12 @@ static void ov_setsockopt(Cpu *c) {
         case 0x800: ret_x(c, 0); return;   // SO_NOSIGPIPE: the host never raises SIGPIPE for datagrams
         }
     } else if (level == IPPROTO_IP) {
+        // MKW_P2P: a multicast group of the room is not one of the host's network (the interface the game names is
+        // the virtual address): joining and leaving are accepted, the room carries the datagrams (ov_p2p.c)
+        if (ov_p2p() && (opt == 9 || opt == 12 || opt == 13)) {
+            ret_x(c, 0);
+            return;
+        }
         hl = IPPROTO_IP;
         switch (opt) {
         case 3: ho = IP_TOS; break;
@@ -405,8 +430,22 @@ static void ov_recvfrom(Cpu *c) {
     ssize_t n = recvfrom(sl.s, arg_p(c, 1), (size_t)arg_x(c, 2), hf | MSG_DONTWAIT, (struct sockaddr *)&a, &alen);
 #endif
     if (n < 0) fail(host_errno());
-    else addr_out(&a, arg_p(c, 4), arg_p(c, 5));
+    else {
+        uint32_t vip;
+        uint16_t sport;
+        if (ov_p2p() && ntohl(a.sin_addr.s_addr) == 0x7f000001 && ov_p2p_from(ntohs(a.sin_port), &vip, &sport))
+            a.sin_addr.s_addr = htonl(vip), a.sin_port = htons(sport);   // a player of the room, not a relay socket
+        addr_out(&a, arg_p(c, 4), arg_p(c, 5));
+    }
     ret_x(c, (uint64_t)(int64_t)n);
+}
+
+// MKW_P2P: a socket the game sends from without binding gets a loopback port now, as a real send would give it one
+static uint16_t slot_unbound_port(int fd, const Slot *sl) {
+    struct sockaddr_in a = {.sin_family = AF_INET};
+    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (bind(sl->s, (struct sockaddr *)&a, sizeof a)) return 0;
+    return slot_note_port(fd, sl->s);
 }
 
 // ssize_t SendTo(int fd, const void *buf, size_t n, int flags, const sockaddr *to, socklen_t tolen)
@@ -425,6 +464,22 @@ static void ov_sendto(Cpu *c) {
             return;
         }
         to = &a;
+        if (ov_p2p()) {
+            uint32_t dst = ntohl(a.sin_addr.s_addr);
+            if (ov_p2p_is_virtual(dst)) {   // into the room, not onto the host's network
+                uint16_t sport = sl.bport ? sl.bport : slot_unbound_port((int)arg_x(c, 0), &sl);
+                mem_commit_range(arg_x(c, 1), arg_x(c, 2));
+                int r = sport ? ov_p2p_send(dst, sport, ntohs(a.sin_port), arg_p(c, 1), (size_t)arg_x(c, 2)) : -1;
+                if (r < 0) fail(G_EHOSTUNREACH);
+                ret_x(c, (uint64_t)(int64_t)r);
+                return;
+            }
+            if (dst >> 24 != 127) {   // nothing else leaves: the host's own network is not part of the game
+                fail(G_ENETUNREACH);
+                ret_x(c, (uint64_t)-1);
+                return;
+            }
+        }
     }
     // ponytail: a datagram send does not wait on a LAN, so MSG_DONTWAIT changes nothing here
     mem_commit_range(arg_x(c, 1), arg_x(c, 2));

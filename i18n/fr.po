@@ -595,6 +595,97 @@ msgstr ""
 "réseau local (ports UDP 49152 et 35000). Il n'atteint que des adresses du réseau local, jamais "
 "Internet. S'applique au prochain démarrage."
 
+msgctxt "UI_MENU_P2P"
+msgid "Online play (P2P)"
+msgstr "Jeu en ligne (P2P)"
+
+msgctxt "UI_MENU_P2P_DESC"
+msgid ""
+"Races other PCs over the internet, with no server: the title menu's Wireless Play becomes LAN "
+"Play over a virtual network between the players. One player opens a room and sends the others its "
+"invite code. The game's traffic goes straight between the PCs; a STUN server (Google's and "
+"Cloudflare's by default) only sees your address once, to tell you what it is. Every player needs "
+"this on. Applies at the next start."
+msgstr "Permet de jouer avec d'autres PC par internet, sans serveur : le Jeu sans fil du menu titre devient le Jeu en LAN, sur un réseau virtuel entre les joueurs. Un joueur ouvre un salon et envoie son code d'invitation aux autres. Le trafic du jeu va directement d'un PC à l'autre ; un serveur STUN (celui de Google et celui de Cloudflare par défaut) ne voit votre adresse qu'une fois, pour vous dire laquelle c'est. Chaque joueur doit l'activer. S'applique au prochain démarrage."
+
+msgctxt "UI_MENU_P2P_HOST"
+msgid "Open a room"
+msgstr "Ouvrir un salon"
+
+msgctxt "UI_MENU_P2P_HOST_DESC"
+msgid ""
+"You become player 1 of a new room. Then choose Copy my invite code and send the code to the "
+"others, in any chat. Open the title menu's LAN Play afterwards."
+msgstr "Vous devenez le joueur 1 d'un nouveau salon. Choisissez ensuite Copier mon code d'invitation et envoyez ce code aux autres, par la messagerie de votre choix. Ouvrez après cela le Jeu en LAN du menu titre."
+
+msgctxt "UI_MENU_P2P_JOIN"
+msgid "Join the room on the clipboard"
+msgstr "Rejoindre le salon du presse-papiers"
+
+msgctxt "UI_MENU_P2P_JOIN_DESC"
+msgid ""
+"Copy the host's invite code first, then choose this. When it works you get a player number. If it "
+"does not connect, copy your own invite code and send it to the host, who adds it: both sides then "
+"send the first packet, which gets past most routers."
+msgstr "Copiez d'abord le code d'invitation de l'hôte, puis choisissez ceci. Si cela marche, vous recevez un numéro de joueur. Si la connexion échoue, copiez votre propre code d'invitation et envoyez-le à l'hôte, qui l'ajoute : les deux côtés envoient alors le premier paquet, ce qui passe la plupart des box."
+
+msgctxt "UI_MENU_P2P_COPY"
+msgid "Copy my invite code"
+msgstr "Copier mon code d'invitation"
+
+msgctxt "UI_MENU_P2P_COPY_DESC"
+msgid ""
+"Copies the code of your room (or, after joining, your own code for the host) to the clipboard. It "
+"holds your public address and the room's secret: send it only to the people you race with."
+msgstr "Copie dans le presse-papiers le code de votre salon (ou, une fois dans un salon, votre propre code pour l'hôte). Il contient votre adresse publique et le secret du salon : ne l'envoyez qu'aux personnes avec qui vous jouez."
+
+msgctxt "UI_MENU_P2P_ADD"
+msgid "Add the player code on the clipboard"
+msgstr "Ajouter le code de joueur du presse-papiers"
+
+msgctxt "UI_MENU_P2P_ADD_DESC"
+msgid ""
+"For the host: adds the invite code a player sent back, so both sides send first. Needed when a "
+"player's router drops the first packet from the host's side."
+msgstr "Pour l'hôte : ajoute le code d'invitation qu'un joueur a renvoyé, pour que les deux côtés envoient en premier. Utile quand la box d'un joueur bloque le premier paquet venant de l'hôte."
+
+msgctxt "UI_MENU_P2P_LEAVE"
+msgid "Leave the room"
+msgstr "Quitter le salon"
+
+msgctxt "UI_MENU_P2P_LEAVE_DESC"
+msgid ""
+"Closes your room or leaves the one you joined. The state of the room is on the right of this row."
+msgstr "Ferme votre salon ou quitte celui que vous avez rejoint. L'état du salon est à droite de cette ligne."
+
+msgctxt "UI_MENU_P2P_ST_NONE"
+msgid "no room"
+msgstr "aucun salon"
+
+msgctxt "UI_MENU_P2P_ST_WAIT"
+msgid "looking up your address"
+msgstr "recherche de votre adresse"
+
+msgctxt "UI_MENU_P2P_ST_HOSTING"
+msgid "player 1, %d of %d connected"
+msgstr "joueur 1, %d connectés sur %d"
+
+msgctxt "UI_MENU_P2P_ST_JOINING"
+msgid "contacting the host"
+msgstr "contact de l'hôte"
+
+msgctxt "UI_MENU_P2P_ST_JOINED"
+msgid "player %d, %d of %d connected"
+msgstr "joueur %d, %d connectés sur %d"
+
+msgctxt "UI_MENU_P2P_NO_CODE"
+msgid "no room code on the clipboard"
+msgstr "pas de code de salon dans le presse-papiers"
+
+msgctxt "UI_MENU_P2P_DONE"
+msgid "done"
+msgstr "fait"
+
 msgctxt "UI_MENU_VOLUME"
 msgid "Volume"
 msgstr "Volume"

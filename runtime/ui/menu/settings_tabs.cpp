@@ -19,6 +19,7 @@ extern "C" {
 #include "fs.h"
 #include "input.h"
 #include "input_map.h"
+#include "ov_p2p.h"
 #include "platform/platform.h"
 #include "sysinfo.h"
 #include "ui/menu/menu.h"
@@ -387,6 +388,8 @@ static void tab_controls(float scale) {
     binds_after_page();
 }
 
+static void rows_p2p();   // below, with the action buttons' helpers
+
 // The languages, LAN play and the update check: the Game and Menu tabs of before, two rows each.
 static void tab_general(float scale) {
     opt_begin("##general", scale);
@@ -402,6 +405,8 @@ static void tab_general(float scale) {
     };
     opt_choice("MKW_MENU_LANG", UI_MENU_MENU_LANG, langs, sizeof langs / sizeof *langs, UI_MENU_MENU_LANG_DESC);
     opt_toggle("MKW_LAN", UI_MENU_LAN, UI_MENU_LAN_DESC);   // sdk/ov/ov_socket.c, the lan set of recomp/patches-mkw.txt
+    opt_toggle("MKW_P2P", UI_MENU_P2P, UI_MENU_P2P_DESC);   // sdk/ov/ov_p2p.c: the same lobby over the internet
+    rows_p2p();
     opt_toggle("MKW_UPDATE_CHECK", UI_MENU_UPDATE_CHECK, UI_MENU_UPDATE_CHECK_DESC);   // ui/launcher/launcher_update.cpp
     opt_end();
 }
@@ -455,6 +460,44 @@ static const char *action_value(const ActionNote &a, UiTextId done_text) {
 }
 
 static void action_done(ActionNote &a, bool ok) { a = {plat_now_ns() + 3000000000ull, ok ? 1 : -1}; }
+
+// Online play: the room's rows under the P2P toggle (sdk/ov/ov_p2p.h). The invite codes travel by the clipboard: no text
+// field, so a controller does everything.
+static void rows_p2p() {
+    if (!cfg_bool("MKW_P2P")) return;
+    static ActionNote host_note, join_note, copy_note, add_note;
+    char text[160], code[64];
+    OvP2pStatus st;
+    ov_p2p_status(&st);
+    opt_indent(true);
+    if (opt_button("##p2p_host", UI_MENU_P2P_HOST, UI_MENU_P2P_HOST_DESC, action_value(host_note, UI_MENU_P2P_DONE)))
+        action_done(host_note, ov_p2p_host() == 0);
+    const char *join_value = join_note.result < 0 && plat_now_ns() <= join_note.until ? menu_text(UI_MENU_P2P_NO_CODE)
+                                                                                   : action_value(join_note, UI_MENU_P2P_DONE);
+    if (opt_button("##p2p_join", UI_MENU_P2P_JOIN, UI_MENU_P2P_JOIN_DESC, join_value)) {
+        char clip[256];
+        action_done(join_note, plat_clipboard_get(clip, sizeof clip) && ov_p2p_join(clip) == 0);
+    }
+    if (st.mode != P2P_ST_NONE) {
+        // the code is the room's when hosting, the player's own for the host after joining
+        const char *shown = st.code_ready ? action_value(copy_note, UI_MENU_COPY_INFO_DONE) : menu_text(UI_MENU_P2P_ST_WAIT);
+        if (opt_button("##p2p_copy", UI_MENU_P2P_COPY, UI_MENU_P2P_COPY_DESC, shown))
+            action_done(copy_note, ov_p2p_code(code) && plat_clipboard_set(code));
+    }
+    if (st.mode == P2P_ST_HOSTING &&
+        opt_button("##p2p_add", UI_MENU_P2P_ADD, UI_MENU_P2P_ADD_DESC, action_value(add_note, UI_MENU_P2P_DONE))) {
+        char clip[256];
+        action_done(add_note, plat_clipboard_get(clip, sizeof clip) && ov_p2p_add(clip) == 0);
+    }
+    switch (st.mode) {
+    case P2P_ST_HOSTING: snprintf(text, sizeof text, menu_text(UI_MENU_P2P_ST_HOSTING), st.connected, st.players); break;
+    case P2P_ST_JOINED: snprintf(text, sizeof text, menu_text(UI_MENU_P2P_ST_JOINED), st.slot, st.connected, st.players); break;
+    case P2P_ST_JOINING: snprintf(text, sizeof text, "%s", menu_text(UI_MENU_P2P_ST_JOINING)); break;
+    default: snprintf(text, sizeof text, "%s", menu_text(UI_MENU_P2P_ST_NONE)); break;
+    }
+    if (opt_button("##p2p_leave", UI_MENU_P2P_LEAVE, UI_MENU_P2P_LEAVE_DESC, text)) ov_p2p_leave();
+    opt_indent(false);
+}
 
 static void tab_advanced(float scale) {
     static ActionNote copy_note, log_note;

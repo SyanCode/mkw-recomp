@@ -400,6 +400,7 @@ int plat_stderr_path(char *out, size_t cap);
 
 // ---- desktop: the in-game menu's "Copy system info" and "Open log folder"
 int plat_clipboard_set(const char *utf8);                 // replaces the clipboard's text; 1 on success
+int plat_clipboard_get(char *out, size_t cap);            // the clipboard's text as UTF-8 (cut to cap - 1); 1 with text, else 0 and out empty
 int plat_open_folder(const char *path);                   // shows the folder in the file manager; 1 on success
 // A desktop shortcut named name that starts exe with dir as its working directory, each system in its own way: a .lnk
 // made by the shell's IShellLink on Windows; a .desktop entry on the XDG desktop folder on Linux, executable and marked

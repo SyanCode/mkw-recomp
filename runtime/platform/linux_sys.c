@@ -300,6 +300,16 @@ int plat_random(void *out, size_t n) {
 
 int plat_clipboard_set(const char *utf8) { return SDL_SetClipboardText(utf8); }
 
+int plat_clipboard_get(char *out, size_t cap) {
+    if (!cap) return 0;
+    out[0] = 0;
+    char *t = SDL_HasClipboardText() ? SDL_GetClipboardText() : NULL;
+    if (!t) return 0;
+    snprintf(out, cap, "%s", t);
+    SDL_free(t);
+    return out[0] != 0;
+}
+
 static void reap_main(void *arg) {
     waitpid((pid_t)(intptr_t)arg, NULL, 0);
 }

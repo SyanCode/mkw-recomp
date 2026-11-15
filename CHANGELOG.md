@@ -23,6 +23,16 @@ its issue, #N), `### Tested` (what was run from the packages before publishing) 
   default and "after restart" notes (nothing there needs a restart), and Graphics gains **Auto-set**, the best preset,
   resolution and FSR for the card and screen in use, only when the player asks for it — the defaults stay the
   console's — with an Undo.
+- **Online play between PCs, peer to peer** (Settings > General > Online play): the LAN lobby over the internet, with no
+  server of ours. One player opens a room and sends the others an invite code (it holds the host's public address,
+  asked once of a STUN server, its local address and a room secret); the others join with it, and the host introduces
+  every player to every other, so the room is a full mesh punched through the routers. The game sees a LAN of its own
+  (100.77.0.x, broadcast and multicast included), so the title menu's LAN Play, Pia and the lobby run as they do on a
+  real network. Every packet carries an HMAC of the room's secret, so only the people given the code can send to a
+  room. The codes travel by the clipboard, so a controller does everything. Not done: encryption, a relay for two
+  players who both sit behind a symmetric NAT (the router then needs the room's UDP port forwarded, `MKW_P2P_PORT`),
+  IPv6. The protocol and the game's side are tested over the loopback (`tests/test_p2p.py`); a race between two real
+  PCs is not yet tested.
 - **The Game files page follows what is installed** (#359 by @ViniciusStanula): with nothing set up it is three
   numbered steps — the player's copy, how its RomFS is kept as two cards saying what each costs, then Set up with the
   folder it installs to — and once installed a card of what is there (game version, the port version that set it up,

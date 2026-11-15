@@ -164,6 +164,13 @@ static void seed_set(const RtGame *g) {
         if (!strcmp(g->patch_sets[i].name, "seed")) g->patch_on[i] = *cfg_value("MKW_SEED") != 0;
 }
 
+// The lan set: the title menu opens with LAN Play chosen, for LAN play (MKW_LAN) and for the same lobby over a
+// peer-to-peer room (MKW_P2P, sdk/ov/ov_p2p.c)
+static void lan_set(const RtGame *g) {
+    for (int i = 0; i < g->npatch_sets; i++)
+        if (!strcmp(g->patch_sets[i].name, "lan")) g->patch_on[i] = cfg_bool("MKW_LAN") || cfg_bool("MKW_P2P");
+}
+
 static void shadow_set(const RtGame *g) {
     shadow_size = (uint32_t)atoi(cfg_value("MKW_SHADOW_SIZE"));   // "console": 0
     const char *extra = cfg_get("MKW_RB_EXTRA_MIB"), *res = cfg_value("MKW_RESOLUTION");
@@ -375,6 +382,7 @@ void rt_patches_init(void) {
     output_size(g);
     shadow_set(g);
     seed_set(g);
+    lan_set(g);
     frame_rate_init(g->patch_page);
 }
 

@@ -18,6 +18,7 @@
 #include "cfg.h"
 #include "host.h"
 #include "ov.h"
+#include "ov_p2p.h"
 
 static int lan_only(struct in_addr a) { return ov_lan_only(ntohl(a.s_addr)); }
 
@@ -78,6 +79,13 @@ static int linux_default_route(const char *ifname) {
 #endif
 
 int ov_lan_address(uint8_t ip[4], uint8_t mask[4]) {
+    if (ov_p2p()) {   // the room's virtual network: 100.77.0.0/24, an address once a room is opened or joined
+        uint32_t v = ov_p2p_vip();
+        if (!v) return -1;
+        ip[0] = (uint8_t)(v >> 24), ip[1] = (uint8_t)(v >> 16), ip[2] = (uint8_t)(v >> 8), ip[3] = (uint8_t)v;
+        mask[0] = mask[1] = mask[2] = 255, mask[3] = 0;
+        return 0;
+    }
     struct in_addr want = {0}, a = {0}, m = {0};
     LanBest best = {0};
     const char *e = cfg_get("MKW_LAN_IP");

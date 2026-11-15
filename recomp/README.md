@@ -13,7 +13,7 @@ Changes against the original:
   ARMv8.3).
 - `patches-mkw.txt`: besides the spin waits and zstd, the `output` set (the game's output size, `patches.c`) and the
   `shadow` set (the shadow map's size, and a second pool slot for the render-buffer allocator to hold it), and the `lan`
-  set (`MKW_LAN=1`: the title menu opens with LAN Play chosen, as after its L+R+left stick combo).
+  set (`MKW_LAN=1` or `MKW_P2P=1`: the title menu opens with LAN Play chosen, as after its L+R+left stick combo).
 - `gen.py`: the `GENERATED_MARKER` (`MKW_RECOMP_…`) lives in the file itself instead of `tools/check_content.py`;
   `tools/git/pre-commit` watches for it. Every back edge of a loop without calls carries a compiler barrier
   (`__asm__ volatile("" ::: "memory")`): without it clang hoists out of the loop the loads another thread changes and

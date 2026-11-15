@@ -590,6 +590,97 @@ msgstr ""
 "w tej samej sieci lokalnej (porty UDP 49152 i 35000). Łączy się tylko z adresami sieci lokalnej, "
 "nigdy z internetem. Działa od następnego uruchomienia."
 
+msgctxt "UI_MENU_P2P"
+msgid "Online play (P2P)"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_DESC"
+msgid ""
+"Races other PCs over the internet, with no server: the title menu's Wireless Play becomes LAN "
+"Play over a virtual network between the players. One player opens a room and sends the others its "
+"invite code. The game's traffic goes straight between the PCs; a STUN server (Google's and "
+"Cloudflare's by default) only sees your address once, to tell you what it is. Every player needs "
+"this on. Applies at the next start."
+msgstr ""
+
+msgctxt "UI_MENU_P2P_HOST"
+msgid "Open a room"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_HOST_DESC"
+msgid ""
+"You become player 1 of a new room. Then choose Copy my invite code and send the code to the "
+"others, in any chat. Open the title menu's LAN Play afterwards."
+msgstr ""
+
+msgctxt "UI_MENU_P2P_JOIN"
+msgid "Join the room on the clipboard"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_JOIN_DESC"
+msgid ""
+"Copy the host's invite code first, then choose this. When it works you get a player number. If it "
+"does not connect, copy your own invite code and send it to the host, who adds it: both sides then "
+"send the first packet, which gets past most routers."
+msgstr ""
+
+msgctxt "UI_MENU_P2P_COPY"
+msgid "Copy my invite code"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_COPY_DESC"
+msgid ""
+"Copies the code of your room (or, after joining, your own code for the host) to the clipboard. It "
+"holds your public address and the room's secret: send it only to the people you race with."
+msgstr ""
+
+msgctxt "UI_MENU_P2P_ADD"
+msgid "Add the player code on the clipboard"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_ADD_DESC"
+msgid ""
+"For the host: adds the invite code a player sent back, so both sides send first. Needed when a "
+"player's router drops the first packet from the host's side."
+msgstr ""
+
+msgctxt "UI_MENU_P2P_LEAVE"
+msgid "Leave the room"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_LEAVE_DESC"
+msgid ""
+"Closes your room or leaves the one you joined. The state of the room is on the right of this row."
+msgstr ""
+
+msgctxt "UI_MENU_P2P_ST_NONE"
+msgid "no room"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_ST_WAIT"
+msgid "looking up your address"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_ST_HOSTING"
+msgid "player 1, %d of %d connected"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_ST_JOINING"
+msgid "contacting the host"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_ST_JOINED"
+msgid "player %d, %d of %d connected"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_NO_CODE"
+msgid "no room code on the clipboard"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_DONE"
+msgid "done"
+msgstr ""
+
 msgctxt "UI_MENU_VOLUME"
 msgid "Volume"
 msgstr "Głośność"

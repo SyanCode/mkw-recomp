@@ -9,13 +9,15 @@
 
 #include "host.h"
 #include "ov.h"
+#include "ov_p2p.h"
 
 // nifm results (module 110); the description number is a hypothesis: any failure keeps the game offline.
 #define NIFM_R_NO_NETWORK (110u | (1u << 9))
 
 static int local_mode;   // SetLocalNetworkMode's last value
 
-static int lan_up(void) { return local_mode && ov_lan(); }
+// MKW_P2P: there is a network once the player has opened or joined a room (its address is the virtual one)
+static int lan_up(void) { return local_mode && ov_lan() && (!ov_p2p() || ov_p2p_vip()); }
 
 static void ov_ok(Cpu *c) { ret_x(c, 0); }
 static void ov_nothing(Cpu *c) { (void)c; }
