@@ -23,7 +23,7 @@ static SDL_Process *g_proc;
 
 // The Python and prepare.py: the package's (setup/python, setup/src) beside the executable, else a source checkout's
 // (the executable in build/: the repository's .venv and tools/). rel names the tool under tools/ ("prepare/prepare.py").
-static bool find_tool(const char *exe_dir, const char *rel, char *python, char *script, size_t cap) {
+static bool find_tool_exact(const char *exe_dir, const char *rel, char *python, char *script, size_t cap) {
 #ifdef _WIN32
     snprintf(python, cap, "%s/setup/python/python.exe", exe_dir);
 #else
@@ -38,6 +38,23 @@ static bool find_tool(const char *exe_dir, const char *rel, char *python, char *
 #endif
     snprintf(script, cap, "%s/../tools/%s", exe_dir, rel);
     return plat_file_exists(python) && plat_file_exists(script);
+}
+
+// Windows: python.exe is a console program, so every tool the start screen runs (the merge at Play, the mods' search and
+// download, the last-run check) flashed a black window. A tool that starts no program of its own runs with pythonw.exe,
+// the same Python without a console. prepare.py is left as it is: it starts compilers, which would each open a window of
+// their own without a console to share. The same Python folder holds both; without pythonw.exe nothing changes.
+static bool find_tool(const char *exe_dir, const char *rel, char *python, char *script, size_t cap) {
+    if (!find_tool_exact(exe_dir, rel, python, script, cap)) return false;
+#ifdef _WIN32
+    size_t n = strlen(python);
+    if (!strstr(rel, "prepare/prepare.py") && n >= 10 && !strcmp(python + n - 10, "python.exe")) {
+        char quiet[1200];
+        snprintf(quiet, sizeof quiet, "%.*spythonw.exe", (int)(n - 10), python);
+        if (plat_file_exists(quiet)) snprintf(python, cap, "%s", quiet);
+    }
+#endif
+    return true;
 }
 
 int setup_available(const char *exe_dir) {

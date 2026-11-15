@@ -43,6 +43,11 @@ MAX_BYTES, MAX_FILES = 4 << 30, 50_000
 BUILD_ID_OFF, BUILD_ID_LEN = 0x40, 8
 
 
+# the start screen runs this with pythonw.exe on Windows (no console): a program started from it gets no window of its own,
+# and no stdin to inherit
+QUIET = {"stdin": subprocess.DEVNULL, "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)}
+
+
 def fail(code, detail):
     print(f"error {code} {detail}", flush=True)
     return 1
@@ -79,7 +84,7 @@ def unpack(archive, dst):
     tar = shutil.which("bsdtar") or shutil.which("tar")
     if not tar:
         return "unpack", "no tar to read this archive"
-    listing = subprocess.run([tar, "-tf", archive], capture_output=True, text=True)
+    listing = subprocess.run([tar, "-tf", archive], capture_output=True, text=True, **QUIET)
     if listing.returncode:
         return "unpack", (listing.stderr.strip().splitlines() or ["not an archive tar reads"])[-1]
     names = [n for n in listing.stdout.splitlines() if n and not n.endswith("/")]
@@ -87,7 +92,7 @@ def unpack(archive, dst):
         return "big", f"{len(names)} files"
     if any(os.path.isabs(n) or ".." in Path(n).parts for n in names):
         return "layout", "unsafe names"
-    if subprocess.run([tar, "-xf", archive, "-C", dst], capture_output=True).returncode:
+    if subprocess.run([tar, "-xf", archive, "-C", dst], capture_output=True, **QUIET).returncode:
         return "unpack", "tar could not unpack it"
     if sum(p.stat().st_size for p in Path(dst).rglob("*") if p.is_file() and not p.is_symlink()) > MAX_BYTES:
         return "big", "over the size limit"
@@ -102,7 +107,7 @@ def mod_roots(top):
         dirs[:] = sorted(d for d in dirs if not d.startswith(".") and d != "__MACOSX")
         if {d.lower() for d in dirs} & {"romfs", "exefs"}:
             roots.append(here)
-            dirs[:] = []   # a mod's own romfs/ may hold folders named like these: do not look inside
+            dirs[:] = []  # a mod's own romfs/ may hold folders named like these: do not look inside
     return roots
 
 
@@ -118,7 +123,7 @@ def original_sha(romfs, rel):
     """SHA-256 of the game's own file at rel (a loose RomFS or a .nup), "-" when the game has none."""
     try:
         return hashlib.sha256(romfs_read(Path(romfs), rel)).hexdigest()
-    except (KeyError, OSError):
+    except KeyError, OSError:
         return "-"
 
 
@@ -135,12 +140,17 @@ def main():
     ap.add_argument("--folder", dest="folder")
     ap.add_argument("--name", default="")
     ap.add_argument("--variant", default="", help="the mod to take from an archive with several (as listed)")
-    ap.add_argument("--source", default="",
-                    help="where the mod came from, 'gb:<mod id>:<file id>' (GameBanana): kept in mod.json for room sync")
-    ap.add_argument("--exefs", default="",
-                    help="the game's exefs folder (default: <game>/exefs); its main names the build id")
-    ap.add_argument("--build-id", default="",
-                    help="16 hex chars of exefs/main's build id, instead of reading it from the exefs")
+    ap.add_argument(
+        "--source",
+        default="",
+        help="where the mod came from, 'gb:<mod id>:<file id>' (GameBanana): kept in mod.json for room sync",
+    )
+    ap.add_argument(
+        "--exefs", default="", help="the game's exefs folder (default: <game>/exefs); its main names the build id"
+    )
+    ap.add_argument(
+        "--build-id", default="", help="16 hex chars of exefs/main's build id, instead of reading it from the exefs"
+    )
     args = ap.parse_args()
     if bool(args.zip_path) == bool(args.folder):
         print("error usage: one of --zip or --folder", flush=True)
@@ -182,8 +192,12 @@ def main():
         rel = os.path.relpath(src, top).replace(os.sep, "/")
         last = rel.split("/")[-1]
         default = stem if rel == "." or last.lower() in ("contents", "0400c3f00006e000") else last
-        if part_dir(src, "romfs") and not os.path.isdir(os.path.join(src, "romfs")) or \
-                part_dir(src, "exefs") and not os.path.isdir(os.path.join(src, "exefs")):
+        if (
+            part_dir(src, "romfs")
+            and not os.path.isdir(os.path.join(src, "romfs"))
+            or part_dir(src, "exefs")
+            and not os.path.isdir(os.path.join(src, "exefs"))
+        ):
             # RomFS/ExeFS spelled otherwise: copy under the names the port reads
             fixed = os.path.join(tmp, ".case")
             shutil.copytree(src, fixed, symlinks=False)
@@ -202,7 +216,7 @@ def main():
         try:
             with open(os.path.join(src, "mod.json"), encoding="utf-8") as _m:
                 shipped_patches = json.load(_m).get("patches", {}) or {}
-        except (OSError, ValueError):
+        except OSError, ValueError:
             pass
         usable = [p for p in shipped_patches.get("spans", []) + shipped_patches.get("sites", []) if isinstance(p, dict)]
         image = []
@@ -238,15 +252,14 @@ def main():
                         continue
                     # files the port treats its own way: the page warns, the mod still installs
                     if rel.startswith("Shader/"):
-                        warnings.add("shaders")   # translated at setup: a mod's shaders need the setup again
+                        warnings.add("shaders")  # translated at setup: a mod's shaders need the setup again
                     elif rel.startswith("System/GymlArchive/general_format"):
-                        warnings.add("graphics")   # the game's graphics settings, which the port's own override
+                        warnings.add("graphics")  # the game's graphics settings, which the port's own override
                     size = os.path.getsize(full)
                     osha = original_sha(loose, rel)
                     lines.append(f"{rel}\t{size}\t{sha256_file(full)}\t{osha}\n")
                     n_romfs += 1
-            with open(os.path.join(dest, "romfs", "manifest.tsv"), "w", encoding="utf-8",
-                       newline="\n") as m:
+            with open(os.path.join(dest, "romfs", "manifest.tsv"), "w", encoding="utf-8", newline="\n") as m:
                 m.writelines(lines)
         # a shipped mod declares its port in mod.json (title, switches, patches); import keeps them
         shipped, switches = {}, {}
@@ -254,15 +267,22 @@ def main():
             with open(os.path.join(src, "mod.json"), encoding="utf-8") as m:
                 shipped = json.load(m)
                 switches = shipped.get("switches", {}) or {}
-        except (OSError, ValueError):
+        except OSError, ValueError:
             pass
         # the name the player typed (or a renamed folder) is what the row shows; the shipped title only
         # stands in when the mod keeps its own folder name
         title = name if (args.name or default != name) else (shipped.get("title") or name)
-        meta = {"name": name, "title": title, "has_romfs": has_romfs,
-                "romfs_files": n_romfs, "has_exefs": has_exefs, "exefs_builds": builds,
-                "exefs_match": matching if has_exefs else True, "switches": switches,
-                "warnings": sorted(warnings)}
+        meta = {
+            "name": name,
+            "title": title,
+            "has_romfs": has_romfs,
+            "romfs_files": n_romfs,
+            "has_exefs": has_exefs,
+            "exefs_builds": builds,
+            "exefs_match": matching if has_exefs else True,
+            "switches": switches,
+            "warnings": sorted(warnings),
+        }
         src_parts = args.source.split(":")
         if len(src_parts) == 3 and src_parts[0] == "gb" and src_parts[1].isdigit() and src_parts[2].isdigit():
             meta["source"] = {"gamebanana": {"mod": int(src_parts[1]), "file": int(src_parts[2])}}
@@ -276,7 +296,7 @@ def main():
     try:
         print(f"done {name} romfs={n_romfs} exefs={','.join(builds) if builds else '-'}", flush=True)
     except BrokenPipeError:
-        os._exit(0)   # the mod is written; the menu went away mid-print
+        os._exit(0)  # the mod is written; the menu went away mid-print
     return 0
 
 
