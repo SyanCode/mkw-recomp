@@ -34,6 +34,20 @@ int ov_p2p_code(char out[64]);            // this machine's code to give away; 1
 void ov_p2p_leave(void);
 void ov_p2p_status(OvP2pStatus *st);
 
+// A rooms and relay server (tools/server/mkw_server.py), from MKW_P2P_SERVER / _HANDLE / _SECRET / _SERVER_PASSWORD
+typedef struct {
+    int state;         // 0 not connected, 1 logging in, 2 logged in
+    char role[12];     // "user", "host" or "admin"
+    char handle[24];
+    char room[8];      // the code of the room we are in, "" outside one
+} OvP2pServer;
+int ov_p2p_server_connect(void);          // the settings' server; a handle and a secret are made when missing. 0, or -1
+void ov_p2p_server_disconnect(void);
+int ov_p2p_server_command(const char *line);   // a line of the server's protocol; 0 sent, -1 not logged in
+int ov_p2p_server_join(const char *code);      // 0 sent, -1
+void ov_p2p_server_status(OvP2pServer *st);
+int ov_p2p_server_event(char out[192]);        // the next line the server sent for the player (ERR, ROOMS, INVITED...); 1 with one
+
 #ifdef __cplusplus
 }
 #endif

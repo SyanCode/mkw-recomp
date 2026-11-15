@@ -13,6 +13,9 @@
 // rest keyed by the room secret. Types: 1 HELLO (guest to host: our nonce, local address), 2 WELCOME (your slot, then
 // a TABLE), 3 PING / 4 PONG (a time the answer echoes: punching, keep-alive, round trip), 5 DATA (source port,
 // destination port, the game's datagram), 6 TABLE (the players' addresses), 7 BYE.
+// Server mode (role 3, tools/server/mkw_server.py): the same mesh, but the server hands out the slots, the room's secret and
+// the players' addresses (PEERS), so a room is a short code, and relays the packets of a pair that cannot reach each other
+// (MKRL frames: the room's own HMAC-tagged packet, wrapped; the receiver does not learn the server as the peer's address).
 // A peer we have not heard from in 8 s is "not connected" and is punched at again every 400 ms; after 60 s it is
 // dropped. Not done: encryption, replay protection, relaying through a third machine, IPv6 (the game uses IPv4 only).
 #include "p2p.h"
@@ -68,6 +71,8 @@ typedef struct {
 
 typedef struct {
     int used, have_addr;
+    char handle[24];               // server mode: the player's @handle
+    uint64_t last_direct, last_relay_tx;   // last packet that came straight; last keep-alive sent through the server
     Ep cand[2];                    // public and local address, as announced
     struct sockaddr_in addr;       // where the last authentic packet came from: the way in
     uint32_t nonce;                // a guest's HELLO nonce (0: unknown)
@@ -89,6 +94,14 @@ struct P2p {
     Peer peers[P2P_MAX_PLAYERS + 1];
     int table_dirty;
     uint64_t last_hello, last_table;
+    // server mode
+    struct sockaddr_in srv;
+    char srv_spec[160], handle[24], secret[72], password[72], token[24], srv_role[12], room_code[8];
+    int srv_resolve, srv_set, srv_state;   // 0 off / 1 logging in / 2 logged in
+    uint64_t srv_tx, srv_rx;
+    char events[8][192];
+    int ev_n;
+    int block_direct;              // tests: drop what peers send straight, as a NAT that blocks them would
     PlatMutex lock;
     PlatThread *th;
     P2pDeliver cb;
@@ -199,15 +212,31 @@ static void key_derive(P2p *p) {
 }
 
 // ---- sending
-static void send_to(P2p *p, const struct sockaddr_in *to, int type, const uint8_t *pl, size_t n) {
-    uint8_t b[MAX_PACKET];
+static size_t build(P2p *p, uint8_t *b, int type, const uint8_t *pl, size_t n) {
     memcpy(b, "MKP2", 4);
     b[4] = (uint8_t)type, b[5] = p->slot;
     put16(b + 6, (uint16_t)n);
     if (n) memcpy(b + HDR, pl, n);
     tag_of(p->key, b, HDR + n, b + HDR + n);
-    sendto(p->s, (const char *)b, (int)(HDR + n + TAG), 0, (const struct sockaddr *)to, sizeof *to);
+    return HDR + n + TAG;
 }
+
+static void send_to(P2p *p, const struct sockaddr_in *to, int type, const uint8_t *pl, size_t n) {
+    uint8_t b[MAX_PACKET];
+    size_t len = build(p, b, type, pl, n);
+    sendto(p->s, (const char *)b, (int)len, 0, (const struct sockaddr *)to, sizeof *to);
+}
+
+// through the server: "MKRL", the destination's slot, then the packet as it would have gone straight
+static void send_relay(P2p *p, int slot, int type, const uint8_t *pl, size_t n) {
+    uint8_t b[MAX_PACKET + 5];
+    memcpy(b, "MKRL", 4);
+    b[4] = (uint8_t)slot;
+    size_t len = build(p, b + 5, type, pl, n);
+    sendto(p->s, (const char *)b, (int)(5 + len), 0, (const struct sockaddr *)&p->srv, sizeof p->srv);
+}
+
+static int direct_ok(const Peer *q, uint64_t now) { return q->have_addr && now - q->last_direct < ALIVE_MS; }
 
 static void send_ep(P2p *p, Ep e, int type, const uint8_t *pl, size_t n) {
     if (!e.ip || !e.port) return;
@@ -282,14 +311,14 @@ typedef struct {
 } Out;
 
 // With the lock held; fills out when the game's callback has to run once it is released
-static void handle(P2p *p, const uint8_t *b, size_t n, const struct sockaddr_in *from, Out *out) {
+static void handle(P2p *p, const uint8_t *b, size_t n, const struct sockaddr_in *from, int relayed, Out *out) {
     int type = b[4], s = b[5];
     size_t pl = get16(b + 6);
     const uint8_t *d = b + HDR;
     uint64_t now = plat_now_ms();
     if (p->role == 0) return;
     if (type == T_HELLO) {
-        if (p->role != 1 || pl < 10) return;
+        if (p->role != 1 || pl < 10 || relayed) return;
         uint32_t nonce = get32(d);
         Ep fe = ep_of(from), lcl = {get32(d + 4), get16(d + 8)};
         int slot = 0;
@@ -309,7 +338,7 @@ static void handle(P2p *p, const uint8_t *b, size_t n, const struct sockaddr_in 
         q->nonce = nonce;
         q->cand[0] = fe;
         if (lcl.ip && lcl.port) q->cand[1] = lcl;
-        q->addr = *from, q->have_addr = 1, q->last_rx = now;
+        q->addr = *from, q->have_addr = 1, q->last_rx = q->last_direct = now;
         uint8_t w[1 + 1 + P2P_MAX_PLAYERS * ENTRY];
         w[0] = (uint8_t)slot;
         size_t k = table_write(p, w + 1);
@@ -317,26 +346,28 @@ static void handle(P2p *p, const uint8_t *b, size_t n, const struct sockaddr_in 
         return;
     }
     if (type == T_WELCOME) {
-        if (p->role != 2 || s != 1 || pl < 2 || d[0] < 2 || d[0] > P2P_MAX_PLAYERS) return;
+        if (p->role != 2 || relayed || s != 1 || pl < 2 || d[0] < 2 || d[0] > P2P_MAX_PLAYERS) return;
         if (!p->slot) rt_log("p2p: joined the room as player %d (100.77.0.%d)", d[0], d[0]);
         p->slot = d[0];
         Peer *h = &p->peers[1];
-        h->addr = *from, h->have_addr = 1, h->last_rx = now;
+        h->addr = *from, h->have_addr = 1, h->last_rx = h->last_direct = now;
         table_apply(p, d + 1, pl - 1);
         return;
     }
     if (s < 1 || s > P2P_MAX_PLAYERS || s == p->slot || !p->slot) return;
     Peer *q = &p->peers[s];
     if (type == T_BYE) {   // the host leaving keeps the mesh: its slot stays, silent, and is punched at
-        if (q->used && s != 1) memset(q, 0, sizeof *q), p->table_dirty = 1;
+        if (q->used && s != 1 && p->role != 3)   // (in a server's room the server's list says who is there) memset(q, 0, sizeof *q), p->table_dirty = 1;
         return;
     }
     if (!q->used && p->role == 2 && s != 1 && type != T_TABLE) peer_new(p, s)->cand[0] = ep_of(from);   // not yet in the table
     if (!q->used) return;
-    q->addr = *from, q->have_addr = 1, q->last_rx = now;
+    q->last_rx = now;
+    if (!relayed) q->addr = *from, q->have_addr = 1, q->last_direct = now;   // a relayed packet says nothing of the way in
     switch (type) {
     case T_PING:
-        if (pl >= 8) send_to(p, from, T_PONG, d, 8);
+        if (pl >= 8 && relayed) send_relay(p, s, T_PONG, d, 8);
+        else if (pl >= 8) send_to(p, from, T_PONG, d, 8);
         break;
     case T_PONG:
         if (pl >= 8) {
@@ -358,7 +389,133 @@ static void handle(P2p *p, const uint8_t *b, size_t n, const struct sockaddr_in 
     (void)n;
 }
 
+// ---- the server's lines (server mode); the lock is held
+static void ev_push(P2p *p, const char *line) {
+    if (p->ev_n == 8) memmove(p->events[0], p->events[1], 7 * sizeof p->events[0]), p->ev_n--;
+    snprintf(p->events[p->ev_n++], sizeof p->events[0], "%s", line);
+}
+
+static void srv_say(P2p *p, const char *line) {
+    char b[300];
+    int n = snprintf(b, sizeof b, "MKSV %s", line);
+    if (p->srv_set && n > 0) sendto(p->s, b, (int)n, 0, (const struct sockaddr *)&p->srv, sizeof p->srv);
+}
+
+static void srv_cmd(P2p *p, const char *line) {
+    char b[280];
+    snprintf(b, sizeof b, "%s %s", p->token, line);
+    srv_say(p, b);
+}
+
+static int ep_parse(const char *t, Ep *e) {
+    char ip[40];
+    const char *c = strrchr(t, ':');
+    struct in_addr a;
+    if (!c || (size_t)(c - t) >= sizeof ip) return -1;
+    memcpy(ip, t, (size_t)(c - t)), ip[c - t] = 0;
+    if (inet_pton(AF_INET, ip, &a) != 1) return -1;
+    *e = (Ep){ntohl(a.s_addr), (uint16_t)atoi(c + 1)};
+    return 0;
+}
+
+static void srv_peers(P2p *p, char **w, int nw) {   // PEERS code n slot:@handle:ip:port:lip:lport ...
+    int seen[P2P_MAX_PLAYERS + 1] = {0};
+    for (int i = 3; i < nw; i++) {
+        char *f[6];
+        int nf = 0;
+        for (char *c = w[i]; nf < 6;) {
+            f[nf++] = c;
+            if (!(c = strchr(c, ':'))) break;
+            *c++ = 0;
+        }
+        int slot = atoi(f[0]);
+        Ep pub, loc;
+        if (nf < 6 || slot < 1 || slot > P2P_MAX_PLAYERS) continue;
+        char pe[48], le[48];
+        snprintf(pe, sizeof pe, "%s:%s", f[2], f[3]);
+        snprintf(le, sizeof le, "%s:%s", f[4], f[5]);
+        if (ep_parse(pe, &pub) || ep_parse(le, &loc)) continue;
+        seen[slot] = 1;
+        if (slot == p->slot) continue;
+        Peer *q = &p->peers[slot];
+        if (!q->used) peer_new(p, slot);
+        q->cand[0] = pub, q->cand[1] = loc;
+        snprintf(q->handle, sizeof q->handle, "%s", f[1]);
+    }
+    for (int sl = 1; sl <= P2P_MAX_PLAYERS; sl++)
+        if (!seen[sl] && sl != p->slot) memset(&p->peers[sl], 0, sizeof p->peers[sl]);
+}
+
+static void srv_line(P2p *p, char *line) {
+    char *w[40];
+    int nw = 0;
+    for (char *t = strtok(line, " \r\n"); t && nw < 40; t = strtok(NULL, " \r\n")) w[nw++] = t;
+    if (!nw) return;
+    p->srv_rx = plat_now_ms();
+    if (!strcmp(w[0], "OK") && nw >= 4) {   // OK token ip:port role: logged in, and our address as the server sees it
+        Ep seen;
+        snprintf(p->token, sizeof p->token, "%s", w[1]);
+        snprintf(p->srv_role, sizeof p->srv_role, "%s", w[3]);
+        if (!ep_parse(w[2], &seen)) p->pub = seen, p->pub_known = 1, p->stun_done = 1;
+        if (p->srv_state != 2) rt_log("p2p: logged in to the server as %s (%s), seen as %s", p->handle, w[3], w[2]);
+        p->srv_state = 2;
+    } else if (!strcmp(w[0], "YOU") && nw >= 3) {
+        snprintf(p->srv_role, sizeof p->srv_role, "%s", w[2]);
+        ev_push(p, "YOU");
+    } else if (!strcmp(w[0], "ROOM") && nw >= 2) {   // a room we made: join it
+        char b[96];
+        snprintf(b, sizeof b, "JOIN %s %u.%u.%u.%u:%u", w[1], p->loc.ip >> 24, p->loc.ip >> 16 & 255, p->loc.ip >> 8 & 255,
+                 p->loc.ip & 255, p->lport);
+        srv_cmd(p, b);
+    } else if (!strcmp(w[0], "JOINED") && nw >= 6 && strlen(w[3]) == 20) {
+        for (int i = 0; i < 10; i++) {
+            unsigned v;
+            if (sscanf(w[3] + 2 * i, "%2x", &v) == 1) p->key10[i] = (uint8_t)v;
+        }
+        key_derive(p);
+        memset(p->peers, 0, sizeof p->peers);
+        p->role = 3, p->slot = (uint8_t)atoi(w[2]);
+        snprintf(p->room_code, sizeof p->room_code, "%s", w[1]);
+        rt_log("p2p: joined room %s (%s) as player %d (100.77.0.%d)", w[1], w[4], p->slot, p->slot);
+        ev_push(p, "JOINED");
+    } else if (!strcmp(w[0], "PEERS") && nw >= 3 && p->role == 3 && !strcmp(w[1], p->room_code)) {
+        srv_peers(p, w, nw);
+    } else if (!strcmp(w[0], "KICKED")) {
+        memset(p->peers, 0, sizeof p->peers);
+        p->role = 0, p->slot = 0, p->room_code[0] = 0;
+        ev_push(p, "KICKED");
+    } else if (!strcmp(w[0], "ERR") || !strcmp(w[0], "ROOMS") || !strcmp(w[0], "INVITED")) {
+        char b[192] = "";
+        for (int i = 0; i < nw; i++) {
+            size_t l = strlen(b);
+            snprintf(b + l, sizeof b - l, "%s%s", i ? " " : "", w[i]);
+        }
+        ev_push(p, b);
+    }
+}
+
+static int from_server(const P2p *p, const struct sockaddr_in *from) {
+    return p->srv_set && from->sin_addr.s_addr == p->srv.sin_addr.s_addr && from->sin_port == p->srv.sin_port;
+}
+
 static void on_packet(P2p *p, const uint8_t *b, size_t n, const struct sockaddr_in *from) {
+    int relayed = 0;
+    if (n > 5 && !memcmp(b, "MKSV ", 5)) {   // the server's text
+        char line[400];
+        if (n - 5 >= sizeof line) return;
+        memcpy(line, b + 5, n - 5), line[n - 5] = 0;
+        plat_mutex_lock(&p->lock);
+        if (from_server(p, from)) srv_line(p, line);
+        plat_mutex_unlock(&p->lock);
+        return;
+    }
+    if (n > 5 && !memcmp(b, "MKRL", 4)) {   // a room packet the server relayed: "MKRL", the sender's slot, the packet
+        plat_mutex_lock(&p->lock);
+        int ok = from_server(p, from);
+        plat_mutex_unlock(&p->lock);
+        if (!ok || !b[4]) return;
+        relayed = b[4], b += 5, n -= 5;
+    }
     if (n < HDR + TAG || memcmp(b, "MKP2", 4)) return;
     size_t pl = get16(b + 6);
     if (HDR + pl + TAG != n) return;
@@ -367,7 +524,7 @@ static void on_packet(P2p *p, const uint8_t *b, size_t n, const struct sockaddr_
     uint8_t want[TAG], diff = 0;
     tag_of(p->key, b, HDR + pl, want);
     for (int i = 0; i < TAG; i++) diff |= (uint8_t)(want[i] ^ b[HDR + pl + i]);
-    if (!diff) handle(p, b, n, from, &out);
+    if (!diff && (!relayed || b[5] == relayed) && !(p->block_direct && !relayed)) handle(p, b, n, from, relayed, &out);
     plat_mutex_unlock(&p->lock);
     if (out.deliver) p->cb(out.src, out.sport, out.dport, out.data, out.len, p->user);
 }
@@ -376,6 +533,18 @@ static void on_packet(P2p *p, const uint8_t *b, size_t n, const struct sockaddr_
 static void tick(P2p *p) {
     uint64_t now = plat_now_ms();
     plat_mutex_lock(&p->lock);
+    if (p->srv_set) {   // the server: log in until it answers, then a keep-alive that also holds the NAT's mapping open
+        if (p->srv_state == 2 && now - p->srv_rx > 20000) p->srv_state = 1;
+        if (p->srv_state != 2 && now - p->srv_tx >= 1000) {
+            char b[240];
+            snprintf(b, sizeof b, "HELLO %s %s %s", p->handle, p->secret, p->password);
+            srv_say(p, b);
+            p->srv_state = 1, p->srv_tx = now;
+        } else if (p->srv_state == 2 && now - p->srv_tx >= 5000) {
+            srv_cmd(p, "PING");
+            p->srv_tx = now;
+        }
+    }
     if (p->role) {
         if (p->role == 2 && !p->slot && now - p->last_hello >= 500) {
             uint8_t h[10];
@@ -386,14 +555,22 @@ static void tick(P2p *p) {
         for (int s = 1; s <= P2P_MAX_PLAYERS && p->slot; s++) {
             Peer *q = &p->peers[s];
             if (!q->used || s == p->slot) continue;
-            int alive = q->have_addr && now - q->last_rx < ALIVE_MS;
+            int alive = direct_ok(q, now);
             if (alive) {
                 if (now - q->last_tx >= KEEPALIVE_MS) ping(p, q, now, 0);
-            } else if (now - q->last_punch >= PUNCH_MS) {
-                ping(p, q, now, 1);
-                q->last_punch = now;
+            } else {
+                if (now - q->last_punch >= PUNCH_MS) {
+                    ping(p, q, now, 1);
+                    q->last_punch = now;
+                }
+                if (p->role == 3 && p->srv_state == 2 && now - q->last_relay_tx >= KEEPALIVE_MS) {   // through the server
+                    uint8_t t[8];
+                    put64(t, now);
+                    send_relay(p, s, T_PING, t, 8);
+                    q->last_relay_tx = now;
+                }
             }
-            if (q->have_addr && now - q->last_rx > DROP_MS && s != 1) {
+            if (q->have_addr && now - q->last_rx > DROP_MS && s != 1 && p->role != 3) {
                 rt_log("p2p: player %d dropped (silent for a minute)", s);
                 memset(q, 0, sizeof *q);
                 p->table_dirty = 1;
@@ -464,6 +641,31 @@ static uint32_t find_local_ip(void) {
     return ip;
 }
 
+// the server's address from its "host:port" (27500 without a port); on this thread, DNS can take a while
+static void srv_resolve(P2p *p) {
+    char spec[160], *colon;
+    plat_mutex_lock(&p->lock);
+    snprintf(spec, sizeof spec, "%s", p->srv_spec);
+    p->srv_resolve = 0;
+    plat_mutex_unlock(&p->lock);
+    uint16_t port = 27500;
+    if ((colon = strrchr(spec, ':'))) *colon = 0, port = (uint16_t)atoi(colon + 1);
+    struct addrinfo hints = {.ai_family = AF_INET, .ai_socktype = SOCK_DGRAM}, *res = NULL;
+    int bad = getaddrinfo(spec, NULL, &hints, &res) || !res;
+    plat_mutex_lock(&p->lock);
+    if (bad) {
+        char e[192];
+        snprintf(e, sizeof e, "ERR cannot find the server %.80s", spec);
+        ev_push(p, e);
+    } else {
+        p->srv = *(struct sockaddr_in *)res->ai_addr;
+        p->srv.sin_port = htons(port);
+        p->srv_set = 1, p->srv_state = 0, p->srv_tx = 0;
+    }
+    plat_mutex_unlock(&p->lock);
+    if (res) freeaddrinfo(res);
+}
+
 static void run(void *arg) {
     P2p *p = arg;
     int found = 0;
@@ -484,6 +686,7 @@ static void run(void *arg) {
     else if (p->stun[0] && !p->stop) rt_log("p2p: no STUN answer: the room works on the local network only");
     uint8_t b[MAX_PACKET];
     while (!p->stop) {
+        if (p->srv_resolve) srv_resolve(p);
         struct pollfd pf = {.fd = p->s, .events = POLLIN};
         if (sock_poll(&pf, 1, 40) > 0)
             for (int i = 0; i < 64; i++) {
@@ -540,6 +743,8 @@ void p2p_leave(P2p *p) {
     if (p->role && p->slot)
         for (int s = 1; s <= P2P_MAX_PLAYERS; s++)
             if (p->peers[s].used && p->peers[s].have_addr) send_to(p, &p->peers[s].addr, T_BYE, NULL, 0);
+    if (p->role == 3 && p->srv_state == 2) srv_cmd(p, "LEAVE");
+    p->room_code[0] = 0;
     memset(p->peers, 0, sizeof p->peers);
     p->role = 0, p->slot = 0, p->table_dirty = 0;
     plat_mutex_unlock(&p->lock);
@@ -638,8 +843,8 @@ int p2p_players(P2p *p, P2pPlayer *out, int max) {
     if (p->role && p->slot) {
         for (int s = 1; s <= P2P_MAX_PLAYERS && n < max; s++) {
             Peer *q = &p->peers[s];
-            if (s == p->slot) out[n++] = (P2pPlayer){P2P_NET | (uint32_t)s, 0, 1, 1};
-            else if (q->used) out[n++] = (P2pPlayer){P2P_NET | (uint32_t)s, q->rtt, q->have_addr && now - q->last_rx < ALIVE_MS, 0};
+            if (s == p->slot) out[n++] = (P2pPlayer){P2P_NET | (uint32_t)s, 0, 1, 1, p->handle};
+            else if (q->used) out[n++] = (P2pPlayer){P2P_NET | (uint32_t)s, q->rtt, q->last_rx && now - q->last_rx < ALIVE_MS, 0, q->handle};
         }
         for (int i = 1; i < n; i++)   // us first
             if (out[i].self) {
@@ -664,10 +869,12 @@ int p2p_send(P2p *p, uint32_t dst, uint16_t sport, uint16_t dport, const void *d
         me = P2P_NET | p->slot;
         int bcast = dst == P2P_BROADCAST || (dst >> 28) == 0xe;   // a multicast group is the room too
         if (bcast || dst == me) to_self = 1;
+        uint64_t now = plat_now_ms();
         for (int s = 1; s <= P2P_MAX_PLAYERS; s++) {
             Peer *q = &p->peers[s];
-            if (s == p->slot || !q->used || !q->have_addr || (!bcast && dst != (P2P_NET | (uint32_t)s))) continue;
-            send_to(p, &q->addr, T_DATA, pl, 4 + len), sent++;
+            if (s == p->slot || !q->used || (!bcast && dst != (P2P_NET | (uint32_t)s))) continue;
+            if (direct_ok(q, now)) send_to(p, &q->addr, T_DATA, pl, 4 + len), sent++;
+            else if (p->role == 3 && p->srv_state == 2) send_relay(p, s, T_DATA, pl, 4 + len), sent++;   // no way in yet
         }
         rc = bcast || to_self || sent ? (int)len : -1;
     } else me = 0;
@@ -675,3 +882,68 @@ int p2p_send(P2p *p, uint32_t dst, uint16_t sport, uint16_t dport, const void *d
     if (to_self) p->cb(me, sport, dport, data, len, p->user);
     return rc;
 }
+
+// ---- server mode
+int p2p_server_connect(P2p *p, const char *spec, const char *handle, const char *secret, const char *password) {
+    if (!spec || !*spec || !handle || handle[0] != '@' || strlen(handle) >= sizeof p->handle || !secret ||
+        strlen(secret) < 8 || strlen(secret) >= sizeof p->secret || strchr(spec, ' ') || strchr(handle, ' '))
+        return -1;
+    plat_mutex_lock(&p->lock);
+    snprintf(p->srv_spec, sizeof p->srv_spec, "%s", spec);
+    snprintf(p->handle, sizeof p->handle, "%s", handle);
+    snprintf(p->secret, sizeof p->secret, "%s", secret);
+    snprintf(p->password, sizeof p->password, "%s", password ? password : "");
+    p->srv_set = 0, p->srv_state = 0, p->srv_resolve = 1;
+    plat_mutex_unlock(&p->lock);
+    return 0;
+}
+
+void p2p_server_disconnect(P2p *p) {
+    p2p_leave(p);
+    plat_mutex_lock(&p->lock);
+    p->srv_set = p->srv_resolve = p->srv_state = 0;
+    plat_mutex_unlock(&p->lock);
+}
+
+int p2p_server_command(P2p *p, const char *line) {
+    int ok = 0;
+    plat_mutex_lock(&p->lock);
+    if (p->srv_state == 2 && strlen(line) < 200) srv_cmd(p, line), ok = 1;
+    plat_mutex_unlock(&p->lock);
+    return ok ? 0 : -1;
+}
+
+int p2p_server_join(P2p *p, const char *code) {
+    char b[120];
+    if (!code || strlen(code) > 12 || strchr(code, ' ')) return -1;
+    plat_mutex_lock(&p->lock);
+    snprintf(b, sizeof b, "JOIN %s %u.%u.%u.%u:%u", code, p->loc.ip >> 24, p->loc.ip >> 16 & 255, p->loc.ip >> 8 & 255,
+             p->loc.ip & 255, p->lport);
+    int ok = p->srv_state == 2;
+    if (ok) srv_cmd(p, b);
+    plat_mutex_unlock(&p->lock);
+    return ok ? 0 : -1;
+}
+
+int p2p_server_poll(P2p *p, char out[192]) {
+    int ok = 0;
+    plat_mutex_lock(&p->lock);
+    if (p->ev_n) {
+        snprintf(out, 192, "%s", p->events[0]);
+        memmove(p->events[0], p->events[1], (size_t)(p->ev_n - 1) * sizeof p->events[0]);
+        p->ev_n--, ok = 1;
+    }
+    plat_mutex_unlock(&p->lock);
+    return ok;
+}
+
+void p2p_server_status(P2p *p, P2pServer *st) {
+    plat_mutex_lock(&p->lock);
+    st->state = p->srv_set ? p->srv_state : 0;
+    snprintf(st->role, sizeof st->role, "%s", p->srv_role);
+    snprintf(st->handle, sizeof st->handle, "%s", p->handle);
+    snprintf(st->room, sizeof st->room, "%s", p->room_code);
+    plat_mutex_unlock(&p->lock);
+}
+
+void p2p_debug_block_direct(P2p *p, int on) { p->block_direct = on; }

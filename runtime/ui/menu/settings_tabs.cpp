@@ -1,6 +1,7 @@
 // The settings pages: the tab bar (L / R or Q / E switch tabs) and the rows of each tab over the cfg settings (core/base/cfg.h),
 // shared by the in-game menu (ui/menu/menu.cpp) and the start screen (ui/launcher/launcher.cpp). Split from menu.cpp, whose look
 // follows SavageWindRecomp's runtime/ui/menu.mm (MIT); the rows are option_rows.cpp's.
+#include <ctype.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -463,6 +464,97 @@ static void action_done(ActionNote &a, bool ok) { a = {plat_now_ns() + 300000000
 
 // Online play: the room's rows under the P2P toggle (sdk/ov/ov_p2p.h). The invite codes travel by the clipboard: no text
 // field, so a controller does everything.
+static bool clip_word(char *out, size_t cap) {   // the clipboard's text, trimmed; false when empty
+    char t[256];
+    if (!plat_clipboard_get(t, sizeof t)) return false;
+    char *a = t;
+    while (*a == ' ' || *a == '\n' || *a == '\r' || *a == '\t') a++;
+    size_t n = strlen(a);
+    while (n && (a[n - 1] == ' ' || a[n - 1] == '\n' || a[n - 1] == '\r' || a[n - 1] == '\t')) n--;
+    if (!n || n >= cap) return false;
+    memcpy(out, a, n), out[n] = 0;
+    return true;
+}
+
+// The rooms server's rows: its address, the player's @handle, a connection, then rooms made and joined by short codes
+static void rows_p2p_server(const OvP2pStatus &st) {
+    static ActionNote addr_note, handle_note, pw_note, create_note, priv_note, rooms_note, inv_note, acc_note, adm_note, grant_note;
+    static char last_err[96], inviter[32], invite_code[16], rooms_text[120];
+    static uint64_t err_until;
+    OvP2pServer sv;
+    ov_p2p_server_status(&sv);
+    char ev[192], w[128], cmd[160];
+    while (ov_p2p_server_event(ev)) {
+        if (!strncmp(ev, "ERR ", 4)) snprintf(last_err, sizeof last_err, "%s", ev + 4), err_until = plat_now_ns() + 6000000000ull;
+        else if (!strncmp(ev, "INVITED ", 8)) sscanf(ev + 8, "%31s %15s", inviter, invite_code);
+        else if (!strncmp(ev, "ROOMS ", 6)) {   // ROOMS n code:name:players:max:host ...
+            rooms_text[0] = 0;
+            for (char *t = strtok(ev + 6, " "); t; t = strtok(nullptr, " ")) {
+                char code[12], name[32], host[32];
+                int pl, mx;
+                if (sscanf(t, "%11[^:]:%31[^:]:%d:%d:%31s", code, name, &pl, &mx, host) == 5) {
+                    size_t l = strlen(rooms_text);
+                    snprintf(rooms_text + l, sizeof rooms_text - l, "%s%s %s %d/%d", l ? ", " : "", code, name, pl, mx);
+                }
+            }
+        }
+    }
+    const char *srv = cfg_value("MKW_P2P_SERVER");
+    if (opt_button("##p2p_srv_addr", UI_MENU_P2P_SERVER_ADDR, UI_MENU_P2P_SERVER_ADDR_DESC, *srv ? srv : menu_text(UI_MENU_P2P_SRV_NONE))) {
+        bool ok = clip_word(w, sizeof w) && !strchr(w, ' ');
+        if (ok) cfg_set("MKW_P2P_SERVER", w), opt_save_soon();
+        action_done(addr_note, ok);
+    }
+    const char *handle = cfg_value("MKW_P2P_HANDLE");
+    if (opt_button("##p2p_srv_handle", UI_MENU_P2P_HANDLE, UI_MENU_P2P_HANDLE_DESC, *handle ? handle : menu_text(UI_MENU_P2P_SRV_NONE))) {
+        bool ok = clip_word(w, sizeof w) && w[0] == '@' && strlen(w) >= 3 && strlen(w) <= 21;
+        if (ok) cfg_set("MKW_P2P_HANDLE", w), opt_save_soon();
+        action_done(handle_note, ok);
+    }
+    if (opt_button("##p2p_srv_pw", UI_MENU_P2P_SRV_PASSWORD, UI_MENU_P2P_SRV_PASSWORD_DESC,
+                   *cfg_value("MKW_P2P_SERVER_PASSWORD") ? "***" : menu_text(UI_MENU_P2P_SRV_NONE))) {
+        bool ok = clip_word(w, sizeof w) && !strchr(w, ' ');
+        if (ok) cfg_set("MKW_P2P_SERVER_PASSWORD", w), opt_save_soon();
+        action_done(pw_note, ok);
+    }
+    char state[96];
+    if (plat_now_ns() < err_until) snprintf(state, sizeof state, "%s", last_err);
+    else if (sv.state == 2) snprintf(state, sizeof state, menu_text(UI_MENU_P2P_SRV_ON), sv.handle, sv.role);
+    else snprintf(state, sizeof state, "%s", menu_text(sv.state == 1 ? UI_MENU_P2P_SRV_LOGIN : UI_MENU_P2P_SRV_OFF));
+    if (opt_button("##p2p_srv_connect", UI_MENU_P2P_SRV_CONNECT, UI_MENU_P2P_SRV_CONNECT_DESC, state)) {
+        if (sv.state) ov_p2p_server_disconnect();
+        else if (ov_p2p_server_connect() == 0) opt_save_soon();   // the handle and the secret may be new
+    }
+    if (sv.state != 2) return;
+    snprintf(cmd, sizeof cmd, "CREATE %.12s public 24", sv.handle + 1);
+    if (opt_button("##p2p_srv_create", UI_MENU_P2P_SRV_CREATE, UI_MENU_P2P_SRV_CREATE_DESC, action_value(create_note, UI_MENU_P2P_DONE)))
+        action_done(create_note, ov_p2p_server_command(cmd) == 0);
+    snprintf(cmd, sizeof cmd, "CREATE %.12s private 24", sv.handle + 1);
+    if (opt_button("##p2p_srv_priv", UI_MENU_P2P_SRV_CREATE_PRIV, UI_MENU_P2P_SRV_CREATE_PRIV_DESC, action_value(priv_note, UI_MENU_P2P_DONE)))
+        action_done(priv_note, ov_p2p_server_command(cmd) == 0);
+    if (opt_button("##p2p_srv_rooms", UI_MENU_P2P_SRV_ROOMS, UI_MENU_P2P_SRV_ROOMS_DESC, rooms_text))
+        action_done(rooms_note, ov_p2p_server_command("LIST") == 0);
+    if (st.mode != P2P_ST_NONE &&
+        opt_button("##p2p_srv_invite", UI_MENU_P2P_SRV_INVITE, UI_MENU_P2P_SRV_INVITE_DESC, action_value(inv_note, UI_MENU_P2P_DONE))) {
+        bool ok = clip_word(w, sizeof w) && w[0] == '@';
+        if (ok) snprintf(cmd, sizeof cmd, "INVITE %s", w);
+        action_done(inv_note, ok && ov_p2p_server_command(cmd) == 0);
+    }
+    if (*invite_code && opt_button("##p2p_srv_accept", UI_MENU_P2P_SRV_ACCEPT, UI_MENU_P2P_SRV_ACCEPT_DESC, inviter))
+        action_done(acc_note, ov_p2p_server_join(invite_code) == 0);
+    if (opt_button("##p2p_srv_admin", UI_MENU_P2P_SRV_ADMIN, UI_MENU_P2P_SRV_ADMIN_DESC, action_value(adm_note, UI_MENU_P2P_DONE))) {
+        bool ok = clip_word(w, sizeof w) && !strchr(w, ' ');
+        if (ok) snprintf(cmd, sizeof cmd, "ADMIN %s", w);
+        action_done(adm_note, ok && ov_p2p_server_command(cmd) == 0);
+    }
+    if (!strcmp(sv.role, "admin") &&
+        opt_button("##p2p_srv_grant", UI_MENU_P2P_SRV_GRANT, UI_MENU_P2P_SRV_GRANT_DESC, action_value(grant_note, UI_MENU_P2P_DONE))) {
+        bool ok = clip_word(w, sizeof w) && w[0] == '@';
+        if (ok) snprintf(cmd, sizeof cmd, "GRANT %s", w);
+        action_done(grant_note, ok && ov_p2p_server_command(cmd) == 0);
+    }
+}
+
 static void rows_p2p() {
     if (!cfg_bool("MKW_P2P")) return;
     static ActionNote host_note, join_note, copy_note, add_note;
@@ -476,7 +568,13 @@ static void rows_p2p() {
                                                                                    : action_value(join_note, UI_MENU_P2P_DONE);
     if (opt_button("##p2p_join", UI_MENU_P2P_JOIN, UI_MENU_P2P_JOIN_DESC, join_value)) {
         char clip[256];
-        action_done(join_note, plat_clipboard_get(clip, sizeof clip) && ov_p2p_join(clip) == 0);
+        OvP2pServer sv;
+        ov_p2p_server_status(&sv);
+        bool got = clip_word(clip, sizeof clip);
+        // a short code (no dashes) is a room on the server; a long one is a player's invite code
+        bool short_code = got && strlen(clip) <= 8 && !strchr(clip, '-');
+        for (char *c = clip; short_code && *c; c++) *c = (char)toupper((unsigned char)*c);
+        action_done(join_note, got && (short_code ? sv.state == 2 && ov_p2p_server_join(clip) == 0 : ov_p2p_join(clip) == 0));
     }
     if (st.mode != P2P_ST_NONE) {
         // the code is the room's when hosting, the player's own for the host after joining
@@ -496,6 +594,7 @@ static void rows_p2p() {
     default: snprintf(text, sizeof text, "%s", menu_text(UI_MENU_P2P_ST_NONE)); break;
     }
     if (opt_button("##p2p_leave", UI_MENU_P2P_LEAVE, UI_MENU_P2P_LEAVE_DESC, text)) ov_p2p_leave();
+    rows_p2p_server(st);
     opt_indent(false);
 }
 

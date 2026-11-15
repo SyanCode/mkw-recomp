@@ -684,6 +684,126 @@ msgctxt "UI_MENU_P2P_DONE"
 msgid "done"
 msgstr ""
 
+msgctxt "UI_MENU_P2P_SERVER_ADDR"
+msgid "Server address"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SERVER_ADDR_DESC"
+msgid ""
+"Copy the address of a rooms server (host or host:port) first, then choose this row. Rooms are "
+"then made and joined with short codes on that server, which also relays the players whose routers "
+"block direct connections."
+msgstr ""
+
+msgctxt "UI_MENU_P2P_HANDLE"
+msgid "My @handle"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_HANDLE_DESC"
+msgid ""
+"Copy a name that starts with @ (lowercase letters, digits and underscores, 2 to 20) first, then "
+"choose this row. It is how the others invite you. The first login on a server claims it with a "
+"secret the game made for you."
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_PASSWORD"
+msgid "Server password from the clipboard"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_PASSWORD_DESC"
+msgid "Copy the server's password first (the admin gives it to the players), then choose this row."
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_CONNECT"
+msgid "Connect to the server"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_CONNECT_DESC"
+msgid ""
+"Logs in with your @handle. When it works the rows below create, list and join rooms. Choose it "
+"again to disconnect."
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_CREATE"
+msgid "Create a public room on the server"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_CREATE_DESC"
+msgid ""
+"Makes a room anyone on the server can see in the list and join with its code, and joins it. Only "
+"the admin, the players the admin allowed and everyone on an open server can do this. Then open "
+"the title menu's LAN Play."
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_CREATE_PRIV"
+msgid "Create a private room on the server"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_CREATE_PRIV_DESC"
+msgid "Like a public room, but only the players you invite by @handle can join it."
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_ROOMS"
+msgid "Rooms on the server"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_ROOMS_DESC"
+msgid ""
+"Asks the server for its public rooms (and the ones you are invited to). The first ones are shown "
+"on the right of this row; join one by copying its code and choosing Join the room on the "
+"clipboard."
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_INVITE"
+msgid "Invite the @handle on the clipboard"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_INVITE_DESC"
+msgid "You must be in a room. The player, if logged in, gets your invitation with the room's code."
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_ACCEPT"
+msgid "Accept the last invitation"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_ACCEPT_DESC"
+msgid "Joins the room of the last invitation you received; who sent it is on the right of this row."
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_ADMIN"
+msgid "Become admin with the key on the clipboard"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_ADMIN_DESC"
+msgid ""
+"The server prints an admin key when it starts. Copy it, then choose this row: your @handle "
+"becomes admin, who can make permanent rooms, allow others to host and kick players."
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_GRANT"
+msgid "Let the @handle on the clipboard host rooms"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_GRANT_DESC"
+msgid "Admin only. The player must have logged in to the server once. They can then create rooms."
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_OFF"
+msgid "not connected"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_LOGIN"
+msgid "logging in"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_ON"
+msgid "%s, %s"
+msgstr ""
+
+msgctxt "UI_MENU_P2P_SRV_NONE"
+msgid "none"
+msgstr ""
+
 msgctxt "UI_MENU_VOLUME"
 msgid "Volume"
 msgstr "Volumen"

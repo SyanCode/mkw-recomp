@@ -33,6 +33,13 @@ its issue, #N), `### Tested` (what was run from the packages before publishing) 
   players who both sit behind a symmetric NAT (the router then needs the room's UDP port forwarded, `MKW_P2P_PORT`),
   IPv6. The protocol and the game's side are tested over the loopback (`tests/test_p2p.py`); a race between two real
   PCs is not yet tested.
+- **A rooms and relay server for online play** (`tools/server/`): a Linux daemon that does not run the game. Players
+  log in with an `@handle`, make and join rooms by a six-letter code or a server address instead of the long invite
+  code, and invite each other by `@handle`. The admin makes rooms (permanent ones too), allows other players to host or
+  opens hosting to everyone (`--open-hosting`); `friends` mode asks for a password, `public` mode limits sessions, rooms
+  and relayed traffic. When two players' routers block each other, the server relays their packets (still tagged by the
+  room's secret). The menu's Online rows get the server's address, the player's @handle, connect, create, list, invite and
+  accept. The secrets stay out of "Copy system info".
 - **The Game files page follows what is installed** (#359 by @ViniciusStanula): with nothing set up it is three
   numbered steps — the player's copy, how its RomFS is kept as two cards saying what each costs, then Set up with the
   folder it installs to — and once installed a card of what is there (game version, the port version that set it up,

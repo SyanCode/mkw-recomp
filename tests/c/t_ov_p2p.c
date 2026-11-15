@@ -15,6 +15,7 @@
 int cfg_bool(const char *n) { return !strcmp(n, "MKW_P2P"); }
 const char *cfg_value(const char *n) { return !strcmp(n, "MKW_P2P_LOCAL_IP") ? "127.0.0.1" : ""; }   // no STUN: the loopback
 int cfg_int(const char *n) { (void)n; return 0; }
+void cfg_set(const char *n, const char *v) { (void)n, (void)v; }   // the server rows are not under test here
 
 static int checks, fails;
 #define CHECK(c) do { checks++; if (!(c)) { fails++; printf("FAIL %s:%d %s\n", __FILE__, __LINE__, #c); } } while (0)

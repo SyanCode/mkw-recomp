@@ -28,6 +28,7 @@ typedef struct {
     int rtt_ms;         // last round trip, -1 before the first answer
     int connected;      // 1 when heard from in the last few seconds
     int self;           // 1 for this machine
+    const char *handle; // server mode: the player's @handle, else ""
 } P2pPlayer;
 
 // Binds a UDP socket (port 0: any; a port you forwarded on the router: that port) and starts the thread. stun: "host:port"
@@ -61,3 +62,25 @@ int p2p_send(P2p *p, uint32_t dst_vip, uint16_t sport, uint16_t dport, const voi
 
 // The code's pieces, exposed for tests: 0 on a valid code of kind 'h' (host) or 'g' (guest), else -1.
 int p2p_code_check(const char *code, char *kind);
+
+// ---- server mode: rooms by a short code on a server (tools/server/mkw_server.py) instead of one player's invite code.
+// The server hands out the slots, the room's secret and the players' addresses, and relays the packets of two players
+// that cannot reach each other. A room is joined with p2p_server_join; what the server answers (ROOMS, INVITED, ERR...)
+// comes back as text lines through p2p_server_poll.
+typedef struct {
+    int state;           // 0 not connected, 1 logging in, 2 logged in
+    char role[12];       // "user", "host" or "admin"
+    char handle[24];
+    char room[8];        // the code of the room we are in, "" outside one
+} P2pServer;
+// spec: "host" or "host:port" (27500). handle: "@name", secret: 8 or more characters only this player knows (the first
+// login claims the handle). password: the server's, "" when it has none. Logs in on the p2p thread; 0, or -1 for bad input.
+int p2p_server_connect(P2p *p, const char *spec, const char *handle, const char *secret, const char *password);
+void p2p_server_disconnect(P2p *p);
+// A command line of the server's protocol ("CREATE fun public 8", "LIST", "INVITE @bob", "GRANT @bob", "ADMIN key"...);
+// a room we create is joined at once. 0 sent, -1 not logged in.
+int p2p_server_command(P2p *p, const char *line);
+int p2p_server_join(P2p *p, const char *code);   // 0 sent, -1 not logged in or a bad code
+int p2p_server_poll(P2p *p, char out[192]);      // the next line the server sent that someone should read; 1 with one
+void p2p_server_status(P2p *p, P2pServer *st);
+void p2p_debug_block_direct(P2p *p, int on);     // tests: drop what peers send straight, as a NAT that blocks them would

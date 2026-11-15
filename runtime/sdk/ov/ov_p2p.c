@@ -133,7 +133,13 @@ int ov_p2p_add(const char *code) {
     P2p *r = get_room();
     return r ? p2p_add(r, code) : -1;
 }
-int ov_p2p_code(char out[64]) { return room ? p2p_code(room, out) : 0; }
+int ov_p2p_code(char out[64]) {
+    P2pServer sv;
+    if (!room) return 0;
+    p2p_server_status(room, &sv);
+    if (sv.room[0]) return snprintf(out, 64, "%s", sv.room), 1;   // in a server's room, the code is its short one
+    return p2p_code(room, out);
+}
 void ov_p2p_leave(void) {
     if (room) p2p_leave(room);
 }
@@ -145,7 +151,7 @@ void ov_p2p_status(OvP2pStatus *st) {
     int n = room ? p2p_players(room, pl, P2P_MAX_PLAYERS) : 0;
     char code[P2P_CODE_MAX];
     uint32_t vip = room ? p2p_vip(room) : 0;
-    st->players = n, st->slot = (int)(vip & 0xff), st->code_ready = room && p2p_code(room, code);
+    st->players = n, st->slot = (int)(vip & 0xff), st->code_ready = room && (p2p_code(room, code) || ov_p2p_code(code));
     for (int i = 0; i < n; i++) {
         st->connected += pl[i].connected;
         if (!pl[i].self && pl[i].rtt_ms > st->worst_rtt_ms) st->worst_rtt_ms = pl[i].rtt_ms;
@@ -153,3 +159,44 @@ void ov_p2p_status(OvP2pStatus *st) {
     int role = room ? p2p_role(room) : 0;
     st->mode = !role ? P2P_ST_NONE : role == 1 ? P2P_ST_HOSTING : vip ? P2P_ST_JOINED : P2P_ST_JOINING;
 }
+
+// ---- the rooms server
+static void hex_random(char *out, size_t n) {   // n hex characters
+    uint8_t b[16];
+    plat_random(b, sizeof b);
+    for (size_t i = 0; i < n; i++) snprintf(out + i, 2, "%x", (b[i / 2] >> (i % 2 ? 0 : 4)) & 15);
+}
+
+int ov_p2p_server_connect(void) {
+    P2p *r = get_room();
+    if (!r) return -1;
+    const char *srv = cfg_value("MKW_P2P_SERVER"), *handle = cfg_value("MKW_P2P_HANDLE"), *secret = cfg_value("MKW_P2P_SECRET");
+    char h[24], x[40];
+    if (!*srv) return -1;
+    if (!*handle) {   // a first login: a name to change later, and a secret only this PC knows (kept in mkw.ini)
+        snprintf(h, sizeof h, "@player");
+        hex_random(h + 7, 4);
+        cfg_set("MKW_P2P_HANDLE", h);
+        handle = cfg_value("MKW_P2P_HANDLE");
+    }
+    if (strlen(secret) < 8) {
+        hex_random(x, 32);
+        cfg_set("MKW_P2P_SECRET", x);
+        secret = cfg_value("MKW_P2P_SECRET");
+    }
+    return p2p_server_connect(r, srv, handle, secret, cfg_value("MKW_P2P_SERVER_PASSWORD"));
+}
+void ov_p2p_server_disconnect(void) {
+    if (room) p2p_server_disconnect(room);
+}
+int ov_p2p_server_command(const char *line) { return room ? p2p_server_command(room, line) : -1; }
+int ov_p2p_server_join(const char *code) { return room ? p2p_server_join(room, code) : -1; }
+void ov_p2p_server_status(OvP2pServer *st) {
+    P2pServer sv = {0};
+    if (room) p2p_server_status(room, &sv);
+    st->state = sv.state;
+    memcpy(st->role, sv.role, sizeof st->role);
+    memcpy(st->handle, sv.handle, sizeof st->handle);
+    memcpy(st->room, sv.room, sizeof st->room);
+}
+int ov_p2p_server_event(char out[192]) { return room ? p2p_server_poll(room, out) : 0; }
